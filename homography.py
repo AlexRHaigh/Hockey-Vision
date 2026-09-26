@@ -4,13 +4,19 @@ Pipeline per frame:
     1. match_keypoints()   work out which rink landmark each dot / circle / line / goal detection is
     2. compute_homography() fit image pixels -> rink feet, dropping outlier matches
     3. HomographyTracker   smooth H over time and bridge frames with too few landmarks
-    4. project_players()   map each player's skate position onto the rink
+    4. project_players()   map each player's skate position (and the puck) onto the rink
 
 Run on an existing run_models.py output:
-    python homography.py outputs/<clip>/detections.json --video videos/<clip>.mp4
-Frames whose fit puts all the players in a tiny patch, or makes them implausibly tall or short,
-are rejected as bad fits. This writes radar.mp4 (top-down view), overlay.mp4 (rink keypoints reprojected onto the video,
-to check the fit) and positions.json next to the detections file.
+    python homography.py outputs/<clip>/detections.json videos/<clip>.mp4
+This writes, next to the detections file:
+    side_by_side.mp4  the original video, unannotated, with the top-down rink view beside it
+    positions.json    every player's rink position (feet) per frame
+With --debug it also writes radar.mp4 (top-down view with the keypoints the fit used) and
+overlay.mp4 (rink keypoints reprojected onto the video, to check the fit).
+
+The top-down view shows players and the puck. On frames with no usable fit, including fits
+rejected because they put all the players in a tiny patch or make them implausibly tall or
+short, the rink is shown empty with its outline in red.
 """
 
 import argparse
@@ -617,7 +623,44 @@ def implied_player_height(detections, H):
     return float(np.median(heights))
 
 
-def draw_radar(template, players, matches=(), H=None, status=None):
+def project_puck(detections, H):
+    """Project the most confident puck detection to rink feet, or None.
+
+    The puck sits on the ice (and is tiny), so the centre of its box is its ice position. A puck
+    in the air projects to where the camera ray meets the ice, so it can look further away than
+    it is.
+    """
+    pucks = _boxes(detections, "puck", "puck")
+    if not pucks or H is None:
+        return None
+    best = max(pucks, key=lambda b: b.conf)
+    x, y = image_to_rink([best.center], H)[0]
+    if abs(x) > rink.HALF_LENGTH or abs(y) > rink.HALF_WIDTH:
+        return None
+    return {"confidence": best.conf, "rink_xy": [round(float(x), 2), round(float(y), 2)]}
+
+
+BOARDS_COLOR_NO_FIT = (40, 40, 220)  # BGR red: the rink outline when this frame has no usable fit
+PUCK_COLOR = (0, 0, 0)
+PUCK_RING_COLOR = (0, 220, 255)  # BGR yellow ring so the puck stands out from the referees
+
+
+def no_fit_template(template):
+    """The template with the boards outline recoloured red."""
+    img = template.astype(np.float32)
+    # The boards are the only grey on the template (everything else is white, red or blue).
+    # Blend each grey pixel towards red by how dark it is, so the anti-aliased edges follow too.
+    grey = (img.max(axis=2) - img.min(axis=2) < 25) & (img.mean(axis=2) < 235)
+    darkness = np.clip((250 - img.mean(axis=2)) / (250 - 64), 0, 1)[..., None]
+    red = np.array(BOARDS_COLOR_NO_FIT, np.float32)
+    white = np.array(PANEL_BG, np.float32)
+    img[grey] = (darkness * red + (1 - darkness) * white)[grey]
+    return img.astype(np.uint8)
+
+
+def draw_radar(template, players, puck=None, matches=()):
+    """Draw players (and the puck) on the rink template. `matches`, if given, also draws the
+    keypoints the fit used, for debugging. No text is drawn."""
     img = template.copy()
     if matches:
         img = rink.draw_keypoints(img, names={m.keypoint for m in matches}, labels=False)
@@ -625,10 +668,29 @@ def draw_radar(template, players, matches=(), H=None, status=None):
         x, y = map(int, np.round(rink.rink_to_template(p["rink_xy"])[0]))
         cv2.circle(img, (x, y), 11, (255, 255, 255), -1)
         cv2.circle(img, (x, y), 9, PLAYER_COLORS.get(p["class"], (0, 0, 0)), -1)
-    status = status or ("homography OK" if H is not None else "no homography (too few landmarks)")
-    cv2.putText(img, status, (20, 40), cv2.FONT_HERSHEY_SIMPLEX, 0.8,
-                (0, 140, 0) if H is not None else (0, 0, 200), 2, cv2.LINE_AA)
+    if puck is not None:
+        x, y = map(int, np.round(rink.rink_to_template(puck["rink_xy"])[0]))
+        cv2.circle(img, (x, y), 8, PUCK_RING_COLOR, -1)
+        cv2.circle(img, (x, y), 5, PUCK_COLOR, -1)
     return img
+
+
+# Template rows/columns that hold the rink (plus a small margin); the rest is blank padding.
+RADAR_CROP = (slice(190, 790), slice(50, 1240))
+PANEL_BG = (254, 253, 255)  # BGR, same off-white as the template background
+
+
+def side_by_side(frame, radar, panel_width):
+    """The untouched video frame on the left, the radar centred in a panel on the right."""
+    h = frame.shape[0]
+    rink_img = radar[RADAR_CROP]
+    scale = min(panel_width / rink_img.shape[1], h / rink_img.shape[0])
+    rink_img = cv2.resize(rink_img, None, fx=scale, fy=scale, interpolation=cv2.INTER_AREA)
+    panel = np.full((h, panel_width, 3), PANEL_BG, dtype=np.uint8)
+    y = (h - rink_img.shape[0]) // 2
+    x = (panel_width - rink_img.shape[1]) // 2
+    panel[y:y + rink_img.shape[0], x:x + rink_img.shape[1]] = rink_img
+    return np.hstack([frame, panel])
 
 
 def draw_overlay(frame, H, matches):
@@ -649,27 +711,39 @@ def draw_overlay(frame, H, matches):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Project players onto the 2D rink using a homography.")
-    parser.add_argument("detections", type=Path, help="detections.json written by run_models.py for a video")
-    parser.add_argument("--video", type=Path, help="Source video, to also write overlay.mp4")
-    parser.add_argument("--width", type=int, default=1920, help="Source frame width if no --video (default 1920)")
-    parser.add_argument("--fps", type=float, default=30.0, help="Output fps if no --video (default 30)")
+    parser = argparse.ArgumentParser(
+        description="Write the video with a top-down rink view of the players beside it.")
+    parser.add_argument("detections", type=Path, help="detections.json written by run_models.py for the video")
+    parser.add_argument("video", type=Path, help="The source video the detections came from")
+    parser.add_argument("--output", type=Path, default=None,
+                        help="Output video (default: side_by_side.mp4 next to the detections)")
+    parser.add_argument("--debug", action="store_true",
+                        help="Also write radar.mp4 and overlay.mp4 with the fitted keypoints drawn on")
     args = parser.parse_args()
 
     frames = json.loads(args.detections.read_text())
     if isinstance(frames, dict):  # single image output
         frames = [{"frame": 0, "time_s": 0.0, "detections": frames}]
     out_dir = args.detections.parent
+    output = args.output or out_dir / "side_by_side.mp4"
 
-    cap = cv2.VideoCapture(str(args.video)) if args.video else None
-    fps = cap.get(cv2.CAP_PROP_FPS) if cap else args.fps
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH)) if cap else args.width
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT)) if cap else 0
+    cap = cv2.VideoCapture(str(args.video))
+    if not cap.isOpened():
+        raise SystemExit(f"Could not open {args.video}")
+    fps = cap.get(cv2.CAP_PROP_FPS) or 30
+    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    frame_size = (width, height)
+    panel_width = int(width * 0.75)
 
     template = rink.load_template()
+    template_no_fit = no_fit_template(template)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    radar_out = cv2.VideoWriter(str(out_dir / "radar.mp4"), fourcc, fps, template.shape[1::-1])
-    overlay_out = cv2.VideoWriter(str(out_dir / "overlay.mp4"), fourcc, fps, (width, height)) if cap else None
+    out = cv2.VideoWriter(str(output), fourcc, fps, (width + panel_width, height))
+    radar_out = overlay_out = None
+    if args.debug:
+        radar_out = cv2.VideoWriter(str(out_dir / "radar.mp4"), fourcc, fps, template.shape[1::-1])
+        overlay_out = cv2.VideoWriter(str(out_dir / "overlay.mp4"), fourcc, fps, frame_size)
 
     tracker = HomographyTracker()
     positions, fitted = [], 0
@@ -677,24 +751,23 @@ def main():
     prev_hist = None
     try:
         for f in frames:
+            ok, frame = cap.read()
+            if not ok:
+                break
             dets = f["detections"]
-            frame = None
-            if cap:
-                ok, frame = cap.read()
-                if not ok:
-                    break
-            if frame is not None:
-                hist = cv2.calcHist([cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)], [0, 1], None, [32, 32], [0, 180, 0, 256])
-                cv2.normalize(hist, hist)
-                if prev_hist is not None and cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL) < 0.7:
-                    tracker.reset()  # camera cut
-                prev_hist = hist
-            frame_size = (width, height or 1080)
+
+            hist = cv2.calcHist([cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)], [0, 1], None, [32, 32], [0, 180, 0, 256])
+            cv2.normalize(hist, hist)
+            if prev_hist is not None and cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL) < 0.7:
+                tracker.reset()  # camera cut
+            prev_hist = hist
+
             matches, lines = match_keypoints(dets, frame_size)
             H_frame, inliers = compute_homography(matches, lines, frame_size)
             fitted += H_frame is not None
             H = tracker.update(H_frame, frame_size)
             players = project_players(dets, H)
+            puck = project_puck(dets, H)
 
             rejected = None
             player_height = implied_player_height(dets, H)
@@ -706,7 +779,7 @@ def main():
             if rejected:
                 # The fit is wrong: drop this frame's output and don't let the tracker carry
                 # the bad fit forward.
-                H, players, inliers = None, [], []
+                H, players, puck, inliers = None, [], None, []
                 tracker.reset()
                 rejected_counts[rejected] += 1
 
@@ -714,25 +787,33 @@ def main():
                               "homography": None if H is None else np.round(H, 8).tolist(),
                               "rejected": rejected,
                               "keypoints_used": [m.keypoint for m in inliers],
-                              "players": players})
-            status = {"players_clustered": "rejected: players clustered together (bad homography)",
-                      "player_scale": "rejected: player size doesn't fit (bad homography)"}.get(rejected)
-            radar_out.write(draw_radar(template, players, inliers, H, status))
-            if cap:
+                              "players": players,
+                              "puck": puck})
+
+            # The rink outline turns red on frames with no usable fit (too few landmarks, or rejected).
+            base = template if H is not None else template_no_fit
+            out.write(side_by_side(frame, draw_radar(base, players, puck), panel_width))
+            if args.debug:
+                radar_out.write(draw_radar(base, players, puck, inliers))
                 overlay_out.write(draw_overlay(frame, H, inliers))
+            if len(positions) % 50 == 0 or len(positions) == len(frames):
+                print(f"\r  frame {len(positions)}/{len(frames)}", end="", flush=True)
     finally:
-        radar_out.release()
-        if cap:
-            cap.release()
-            overlay_out.release()
+        print()
+        cap.release()
+        out.release()
+        for w in (radar_out, overlay_out):
+            if w is not None:
+                w.release()
 
     (out_dir / "positions.json").write_text(json.dumps(positions, indent=2))
-    print(f"Homography fitted on {fitted}/{len(frames)} frames "
-          f"({sum(p['homography'] is not None for p in positions)} with tracking, "
-          f"{rejected_counts['players_clustered']} rejected for clustered players, "
-          f"{rejected_counts['player_scale']} for implausible player size)")
-    print(f"Wrote {out_dir / 'radar.mp4'}, {out_dir / 'positions.json'}"
-          + (f", {out_dir / 'overlay.mp4'}" if cap else ""))
+    shown = sum(p["homography"] is not None for p in positions)
+    print(f"Rink view shown on {shown}/{len(frames)} frames (red outline on the other {len(positions) - shown}: "
+          f"{rejected_counts['players_clustered']} with clustered players, "
+          f"{rejected_counts['player_scale']} with implausible player size, rest too few rink markings); "
+          f"puck shown on {sum(p['puck'] is not None for p in positions)}")
+    print(f"Wrote {output} and {out_dir / 'positions.json'}"
+          + (f", plus {out_dir / 'radar.mp4'} and {out_dir / 'overlay.mp4'}" if args.debug else ""))
 
 
 if __name__ == "__main__":

@@ -38,6 +38,12 @@ EXCLUDED_CLASSES = {
     "player": {"puck"},
 }
 
+# Per-model confidence thresholds that differ from --conf. The puck is small and often blurred,
+# so its detections score lower and a lower threshold keeps more of them.
+MODEL_CONF = {
+    "puck": 0.10,
+}
+
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}
 
@@ -71,9 +77,12 @@ def kept_classes(name, model):
 
 
 def run_on_frame(models, frame, conf, imgsz, device):
-    """Return {model_name: ultralytics Results} for a single BGR frame."""
+    """Return {model_name: ultralytics Results} for a single BGR frame.
+
+    `conf` is {model_name: threshold}.
+    """
     return {
-        name: model.predict(frame, conf=conf, imgsz=imgsz, device=device,
+        name: model.predict(frame, conf=conf[name], imgsz=imgsz, device=device,
                             classes=kept_classes(name, model), verbose=False)[0]
         for name, model in models.items()
     }
@@ -126,7 +135,7 @@ def process_image(path, models, args, out_dir):
     if frame is None:
         print(f"  Could not read {path}, skipping")
         return
-    results = run_on_frame(models, frame, args.conf, args.imgsz, args.device)
+    results = run_on_frame(models, frame, args.model_conf, args.imgsz, args.device)
 
     cv2.imwrite(str(out_dir / f"combined{path.suffix}"), draw_combined(frame, results))
     if args.per_model:
@@ -162,7 +171,7 @@ def process_video(path, models, args, out_dir):
             ok, frame = cap.read()
             if not ok or (args.max_frames and idx >= args.max_frames):
                 break
-            results = run_on_frame(models, frame, args.conf, args.imgsz, args.device)
+            results = run_on_frame(models, frame, args.model_conf, args.imgsz, args.device)
 
             writers["combined"].write(draw_combined(frame, results))
             if args.per_model:
@@ -194,7 +203,10 @@ def main():
     parser.add_argument("source", type=Path, help="Image, video, or folder of images/videos")
     parser.add_argument("--models", nargs="+", choices=MODEL_NAMES, default=MODEL_NAMES,
                         help="Which models to run (default: all)")
-    parser.add_argument("--conf", type=float, default=0.25, help="Confidence threshold (default: 0.25)")
+    parser.add_argument("--conf", type=float, default=0.25,
+                        help="Confidence threshold for every model except the puck (default: 0.25)")
+    parser.add_argument("--puck-conf", type=float, default=MODEL_CONF["puck"],
+                        help=f"Confidence threshold for the puck model (default: {MODEL_CONF['puck']})")
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image size (default: 640)")
     parser.add_argument("--device", default=None, help="cpu, mps, cuda, 0... (default: auto)")
     parser.add_argument("--output", type=Path, default=Path("outputs"), help="Output folder (default: outputs)")
@@ -206,6 +218,8 @@ def main():
     if not args.source.exists():
         sys.exit(f"Source not found: {args.source}")
     args.device = pick_device(args.device)
+    args.model_conf = {name: MODEL_CONF.get(name, args.conf) for name in MODEL_NAMES}
+    args.model_conf["puck"] = args.puck_conf
 
     inputs = collect_inputs(args.source)
     if not inputs:
