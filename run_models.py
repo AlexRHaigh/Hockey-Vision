@@ -56,7 +56,9 @@ MODEL_CONF = {
 
 # Jersey numbers.
 NUMBER_IMGSZ = 640          # player crops are upscaled to this for the digit model
-NUMBER_BATCH = 16           # player crops per digit-model call; export_engines.py builds for this
+# Player crops per digit-model call; export_engines.py builds the engine for up to this many.
+# 16 needed more memory than an 8 GB Orin Nano has free to build the engine; 4 builds fine.
+NUMBER_BATCH = 4
 MIN_NUMBER_CROP_PX = 60     # players shorter than this are too small to read a number from
 DIGIT_NMS_IOU = 0.5         # overlapping digit boxes of different classes: keep the most confident
 # Jersey numbers sit on the torso: digit centres are 20-60% of the way down the player's box and
