@@ -10,16 +10,25 @@ Run on an existing run_models.py output:
     python homography.py outputs/<clip>/detections.json videos/<clip>.mp4
 This writes, next to the detections file:
     side_by_side.mp4  the original video, unannotated, with the top-down rink view beside it
-    positions.json    every player's rink position (feet) per frame
-With --debug it also writes radar.mp4 (top-down view with the keypoints the fit used) and
-overlay.mp4 (rink keypoints reprojected onto the video, to check the fit).
+    positions.json    per frame: the homography, keypoints used, and player / puck rink positions
+    positions.csv     one row per player or puck per frame: rink x, y in feet (and jersey number)
+    homographies.csv  one row per frame: the 3x3 image -> rink homography, h00..h22 (empty if no fit)
+With --no-video the video is skipped. With --debug it also writes radar.mp4 (top-down view with
+the keypoints the fit used) and overlay.mp4 (rink keypoints reprojected onto the video, to check
+the fit).
 
-The top-down view shows players and the puck. On frames with no usable fit, including fits
-rejected because they put all the players in a tiny patch or make them implausibly tall or
-short, the rink is shown empty with its outline in red.
+A homography row maps a video pixel (u, v) to rink feet: [x, y, w] = H @ [u, v, 1], then
+(x / w, y / w). Rink feet have the origin at the centre dot, x along the rink (-100 to 100) and
+y across it (-42.5 near boards to 42.5 far boards); see rink.py.
+
+The top-down view shows players (with their jersey numbers, when run_models.py read them) and
+the puck. On frames with no usable fit, including fits rejected because they put all the
+players in a tiny patch or make them implausibly tall or short, the rink is shown empty with
+its outline in red.
 """
 
 import argparse
+import csv
 import itertools
 import json
 from pathlib import Path
@@ -71,6 +80,7 @@ class Box:
         self.cls = det["class"]
         self.conf = det["confidence"]
         self.x1, self.y1, self.x2, self.y2 = det["box_xyxy"]
+        self.jersey_number = det.get("jersey_number")
 
     @property
     def center(self):
@@ -591,7 +601,7 @@ def project_players(detections, H):
     for p, (x, y) in zip(players, ft):
         # Anything well outside the boards is a bad projection (or a player on the bench).
         if abs(x) <= rink.HALF_LENGTH + 5 and abs(y) <= rink.HALF_WIDTH + 5:
-            out.append({"class": p.cls, "confidence": p.conf,
+            out.append({"class": p.cls, "confidence": p.conf, "jersey_number": p.jersey_number,
                         "rink_xy": [round(float(np.clip(x, -rink.HALF_LENGTH, rink.HALF_LENGTH)), 2),
                                     round(float(np.clip(y, -rink.HALF_WIDTH, rink.HALF_WIDTH)), 2)]})
     return out
@@ -659,15 +669,21 @@ def no_fit_template(template):
 
 
 def draw_radar(template, players, puck=None, matches=()):
-    """Draw players (and the puck) on the rink template. `matches`, if given, also draws the
-    keypoints the fit used, for debugging. No text is drawn."""
+    """Draw players (and the puck) on the rink template, with each player's jersey number in their
+    dot when it's known. `matches`, if given, also draws the keypoints the fit used, for debugging."""
     img = template.copy()
     if matches:
         img = rink.draw_keypoints(img, names={m.keypoint for m in matches}, labels=False)
     for p in players:
         x, y = map(int, np.round(rink.rink_to_template(p["rink_xy"])[0]))
-        cv2.circle(img, (x, y), 11, (255, 255, 255), -1)
-        cv2.circle(img, (x, y), 9, PLAYER_COLORS.get(p["class"], (0, 0, 0)), -1)
+        number = p.get("jersey_number")
+        radius = 13 if number else 9  # room for the jersey number inside the dot
+        cv2.circle(img, (x, y), radius + 2, (255, 255, 255), -1)
+        cv2.circle(img, (x, y), radius, PLAYER_COLORS.get(p["class"], (0, 0, 0)), -1)
+        if number:
+            (tw, th), _ = cv2.getTextSize(number, cv2.FONT_HERSHEY_SIMPLEX, 0.45, 1)
+            cv2.putText(img, number, (x - tw // 2, y + th // 2), cv2.FONT_HERSHEY_SIMPLEX, 0.45,
+                        (255, 255, 255), 1, cv2.LINE_AA)
     if puck is not None:
         x, y = map(int, np.round(rink.rink_to_template(puck["rink_xy"])[0]))
         cv2.circle(img, (x, y), 8, PUCK_RING_COLOR, -1)
@@ -710,6 +726,26 @@ def draw_overlay(frame, H, matches):
     return img
 
 
+def write_csvs(positions, out_dir):
+    """Flat versions of positions.json, for spreadsheets and pandas."""
+    with open(out_dir / "positions.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["frame", "time_s", "object", "class", "jersey_number", "confidence", "x_ft", "y_ft"])
+        for p in positions:
+            for pl in p["players"]:
+                w.writerow([p["frame"], p["time_s"], "player", pl["class"], pl.get("jersey_number") or "",
+                            pl["confidence"], *pl["rink_xy"]])
+            if p["puck"] is not None:
+                w.writerow([p["frame"], p["time_s"], "puck", "puck", "", p["puck"]["confidence"],
+                            *p["puck"]["rink_xy"]])
+    with open(out_dir / "homographies.csv", "w", newline="") as f:
+        w = csv.writer(f)
+        w.writerow(["frame", "time_s", "rejected", "keypoints_used"] + [f"h{r}{c}" for r in range(3) for c in range(3)])
+        for p in positions:
+            H = sum(p["homography"], []) if p["homography"] is not None else [""] * 9
+            w.writerow([p["frame"], p["time_s"], p["rejected"] or "", " ".join(p["keypoints_used"])] + H)
+
+
 def main():
     parser = argparse.ArgumentParser(
         description="Write the video with a top-down rink view of the players beside it.")
@@ -717,6 +753,8 @@ def main():
     parser.add_argument("video", type=Path, help="The source video the detections came from")
     parser.add_argument("--output", type=Path, default=None,
                         help="Output video (default: side_by_side.mp4 next to the detections)")
+    parser.add_argument("--no-video", dest="write_video", action="store_false",
+                        help="Only write positions.json and the CSVs, not side_by_side.mp4 (faster)")
     parser.add_argument("--debug", action="store_true",
                         help="Also write radar.mp4 and overlay.mp4 with the fitted keypoints drawn on")
     args = parser.parse_args()
@@ -739,7 +777,9 @@ def main():
     template = rink.load_template()
     template_no_fit = no_fit_template(template)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
-    out = cv2.VideoWriter(str(output), fourcc, fps, (width + panel_width, height))
+    out = None
+    if args.write_video:
+        out = cv2.VideoWriter(str(output), fourcc, fps, (width + panel_width, height))
     radar_out = overlay_out = None
     if args.debug:
         radar_out = cv2.VideoWriter(str(out_dir / "radar.mp4"), fourcc, fps, template.shape[1::-1])
@@ -792,7 +832,8 @@ def main():
 
             # The rink outline turns red on frames with no usable fit (too few landmarks, or rejected).
             base = template if H is not None else template_no_fit
-            out.write(side_by_side(frame, draw_radar(base, players, puck), panel_width))
+            if out is not None:
+                out.write(side_by_side(frame, draw_radar(base, players, puck), panel_width))
             if args.debug:
                 radar_out.write(draw_radar(base, players, puck, inliers))
                 overlay_out.write(draw_overlay(frame, H, inliers))
@@ -801,19 +842,22 @@ def main():
     finally:
         print()
         cap.release()
-        out.release()
-        for w in (radar_out, overlay_out):
+        for w in (out, radar_out, overlay_out):
             if w is not None:
                 w.release()
 
     (out_dir / "positions.json").write_text(json.dumps(positions, indent=2))
+    write_csvs(positions, out_dir)
     shown = sum(p["homography"] is not None for p in positions)
     print(f"Rink view shown on {shown}/{len(frames)} frames (red outline on the other {len(positions) - shown}: "
           f"{rejected_counts['players_clustered']} with clustered players, "
           f"{rejected_counts['player_scale']} with implausible player size, rest too few rink markings); "
           f"puck shown on {sum(p['puck'] is not None for p in positions)}")
-    print(f"Wrote {output} and {out_dir / 'positions.json'}"
-          + (f", plus {out_dir / 'radar.mp4'} and {out_dir / 'overlay.mp4'}" if args.debug else ""))
+    written = ([output] if args.write_video else []) + [out_dir / n for n in
+                                                        ("positions.json", "positions.csv", "homographies.csv")]
+    if args.debug:
+        written += [out_dir / "radar.mp4", out_dir / "overlay.mp4"]
+    print("Wrote " + ", ".join(str(w) for w in written))
 
 
 if __name__ == "__main__":
