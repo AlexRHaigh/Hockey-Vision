@@ -55,9 +55,10 @@ This skips all annotated videos and writes, in `outputs/<clip>/`:
 | File | Contents |
 |---|---|
 | `homographies.csv` | one row per frame: `frame, time_s, rejected, keypoints_used, h00 … h22` (empty when no fit) |
-| `positions.csv` | one row per player / puck per frame: `frame, time_s, object, class, jersey_number, confidence, x_ft, y_ft` |
+| `positions.csv` | one row per player / puck per frame: `frame, time_s, object, track_id, class, jersey_number, confidence, x_ft, y_ft` |
 | `positions.json` | the same, nested per frame |
 | `detections.json` | the raw model detections (input to `homography.py`) |
+| `export/` | analysis-ready tables from `export_data.py`, see below |
 
 To also get `side_by_side.mp4`, run `homography.py` without `--no-video`.
 
@@ -66,6 +67,23 @@ To also get `side_by_side.mp4`, run `homography.py` without `--no-video`.
 ```bash
 scp <user>@<jetson-ip>:~/Hockey-Vision/outputs/<clip>/{homographies.csv,positions.csv,positions.json} .
 ```
+
+or just the export tables: `scp -r <user>@<jetson-ip>:~/Hockey-Vision/outputs/<clip>/export .`
+
+## Exported tables
+
+`export_data.py` (the last step of `run_clip.sh`) joins the detections and rink positions into
+tables with a `clip` column, so several clips can be exported together
+(`python export_data.py outputs` writes every clip to `outputs/export/`). It only needs the
+Python standard library, so it can also be re-run on your Mac on copied output folders.
+
+| File | Contents |
+|---|---|
+| `players.csv` | one row per player detection per frame: `track_id`, `team` (A/B), `role` (skater/goalie/referee), `jersey_number`, image box, and rink `x_ft, y_ft` (empty on frames without a usable fit) |
+| `puck.csv` | one row per frame with a puck: image box and rink `x_ft, y_ft` |
+| `frames.csv` | one row per frame: `rink_fit`, `rejected`, `keypoints_used`, player and puck counts |
+| `tracks.csv` | one row per player track: team, role, jersey number, first/last frame, frames seen, mean position, `distance_ft`, `mean_speed_ft_s` |
+| `metadata.json` | source files, fps, the coordinate system and a description of every column |
 
 ## Using the homography
 

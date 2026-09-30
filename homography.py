@@ -11,7 +11,7 @@ Run on an existing run_models.py output:
 This writes, next to the detections file:
     side_by_side.mp4  the original video, unannotated, with the top-down rink view beside it
     positions.json    per frame: the homography, keypoints used, and player / puck rink positions
-    positions.csv     one row per player or puck per frame: rink x, y in feet (and jersey number)
+    positions.csv     one row per player or puck per frame: rink x, y in feet (and track id, jersey number)
     homographies.csv  one row per frame: the 3x3 image -> rink homography, h00..h22 (empty if no fit)
 With --no-video the video is skipped. With --debug it also writes radar.mp4 (top-down view with
 the keypoints the fit used) and overlay.mp4 (rink keypoints reprojected onto the video, to check
@@ -81,6 +81,7 @@ class Box:
         self.conf = det["confidence"]
         self.x1, self.y1, self.x2, self.y2 = det["box_xyxy"]
         self.jersey_number = det.get("jersey_number")
+        self.track_id = det.get("track_id")
 
     @property
     def center(self):
@@ -602,6 +603,7 @@ def project_players(detections, H):
         # Anything well outside the boards is a bad projection (or a player on the bench).
         if abs(x) <= rink.HALF_LENGTH + 5 and abs(y) <= rink.HALF_WIDTH + 5:
             out.append({"class": p.cls, "confidence": p.conf, "jersey_number": p.jersey_number,
+                        "track_id": p.track_id, "box_xyxy": [p.x1, p.y1, p.x2, p.y2],
                         "rink_xy": [round(float(np.clip(x, -rink.HALF_LENGTH, rink.HALF_LENGTH)), 2),
                                     round(float(np.clip(y, -rink.HALF_WIDTH, rink.HALF_WIDTH)), 2)]})
     return out
@@ -730,13 +732,15 @@ def write_csvs(positions, out_dir):
     """Flat versions of positions.json, for spreadsheets and pandas."""
     with open(out_dir / "positions.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["frame", "time_s", "object", "class", "jersey_number", "confidence", "x_ft", "y_ft"])
+        w.writerow(["frame", "time_s", "object", "track_id", "class", "jersey_number", "confidence",
+                    "x_ft", "y_ft"])
         for p in positions:
             for pl in p["players"]:
-                w.writerow([p["frame"], p["time_s"], "player", pl["class"], pl.get("jersey_number") or "",
-                            pl["confidence"], *pl["rink_xy"]])
+                tid = pl.get("track_id")
+                w.writerow([p["frame"], p["time_s"], "player", "" if tid is None else tid, pl["class"],
+                            pl.get("jersey_number") or "", pl["confidence"], *pl["rink_xy"]])
             if p["puck"] is not None:
-                w.writerow([p["frame"], p["time_s"], "puck", "puck", "", p["puck"]["confidence"],
+                w.writerow([p["frame"], p["time_s"], "puck", "", "puck", "", p["puck"]["confidence"],
                             *p["puck"]["rink_xy"]])
     with open(out_dir / "homographies.csv", "w", newline="") as f:
         w = csv.writer(f)
