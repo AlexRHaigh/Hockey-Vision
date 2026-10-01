@@ -7,6 +7,8 @@ would run on the CPU).
 ## 1. One-time setup on the Jetson
 
 ```bash
+sudo nvpmodel -q                        # current power mode; switch to the highest (MAXN / MAXN SUPER)
+sudo nvpmodel -m <mode>                 #   with -m, the mode numbers are listed in /etc/nvpmodel.conf
 sudo jetson_clocks                      # run the clocks at max (resets on reboot)
 git clone https://github.com/AlexRHaigh/Hockey-Vision.git
 cd Hockey-Vision
@@ -40,7 +42,15 @@ python export_engines.py
 ```
 
 This writes `CV_Models/<model>_model.engine` for each model (FP16), which `run_models.py` then
-uses automatically. It takes a while. If a build runs out of memory, add swap on the Jetson
+uses automatically. It takes a while. The engines take 384x640 input (16:9 video at 640 wide), not
+640x640, which saves the ~40% of the work a square engine spends on padding; for video of another
+shape pass `--imgsz <height> <width>`. Engines built before this was the default are square:
+rebuild them with `python export_engines.py --force`.
+
+If you've trained the jersey number ResNet (`CV_Models/jersey_model.pt`, see the main
+[README](../README.md#jersey-number-resnet-optional)), `export_engines.py` also builds
+`jersey_model.engine` from it, via ONNX (`pip install onnx` in the container if the export says
+it's missing). Then add `--number-reader resnet` when running a clip. If a build runs out of memory, add swap on the Jetson
 and retry just that model with `--models <name>`.
 
 ## 5. Run a clip
@@ -50,7 +60,10 @@ jetson/run_clip.sh videos/<clip>.mp4                    # whole video
 jetson/run_clip.sh videos/<clip>.mp4 --max-frames 1800  # first 1800 frames only
 ```
 
-This skips all annotated videos and writes, in `outputs/<clip>/`:
+This skips all annotated videos and re-reads a player's jersey number only every 5th frame once it
+is settled (`--jersey-stride 5`; reading numbers is most of the GPU work, and players without a
+number yet are still read every frame). Add `--jersey-stride 1` to read every frame. It writes,
+in `outputs/<clip>/`:
 
 | File | Contents |
 |---|---|

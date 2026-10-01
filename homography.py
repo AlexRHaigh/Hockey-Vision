@@ -38,6 +38,7 @@ import numpy as np
 
 import rink
 from rink import KEYPOINTS
+from video_io import FrameReader
 
 MIN_POINTS = 4
 OUTLIER_FT = 6.0  # a match further than this from the fit is a wrong identification
@@ -769,12 +770,11 @@ def main():
     out_dir = args.detections.parent
     output = args.output or out_dir / "side_by_side.mp4"
 
-    cap = cv2.VideoCapture(str(args.video))
-    if not cap.isOpened():
-        raise SystemExit(f"Could not open {args.video}")
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+    try:
+        video = FrameReader(args.video, len(frames))
+    except OSError as e:
+        raise SystemExit(str(e))
+    fps, width, height = video.fps, video.width, video.height
     frame_size = (width, height)
     panel_width = int(width * 0.75)
 
@@ -794,13 +794,12 @@ def main():
     rejected_counts = {"players_clustered": 0, "player_scale": 0}
     prev_hist = None
     try:
-        for f in frames:
-            ok, frame = cap.read()
-            if not ok:
-                break
+        for f, frame in zip(frames, video):
             dets = f["detections"]
 
-            hist = cv2.calcHist([cv2.cvtColor(frame, cv2.COLOR_BGR2HSV)], [0, 1], None, [32, 32], [0, 180, 0, 256])
+            # The colour histogram of a quarter-size frame is as good for spotting cuts, and much cheaper.
+            small = cv2.resize(frame, (width // 4, height // 4), interpolation=cv2.INTER_AREA)
+            hist = cv2.calcHist([cv2.cvtColor(small, cv2.COLOR_BGR2HSV)], [0, 1], None, [32, 32], [0, 180, 0, 256])
             cv2.normalize(hist, hist)
             if prev_hist is not None and cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL) < 0.7:
                 tracker.reset()  # camera cut
@@ -845,7 +844,7 @@ def main():
                 print(f"\r  frame {len(positions)}/{len(frames)}", end="", flush=True)
     finally:
         print()
-        cap.release()
+        video.close()
         for w in (out, radar_out, overlay_out):
             if w is not None:
                 w.release()

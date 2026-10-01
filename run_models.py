@@ -12,12 +12,18 @@ For every input this writes to <output>/<input name>/:
 With --no-video only detections.json is written.
 
 Each model is loaded from CV_Models/<model>_model.engine when that exists (a TensorRT engine
-built by export_engines.py, for the Jetson), otherwise from CV_Models/<model>_model.pt.
+built by export_engines.py, for the Jetson), otherwise from CV_Models/<model>_model.pt. An engine
+runs at the input size it was built for; --imgsz only applies to .pt weights, which run in FP16
+on a CUDA GPU.
 
 Jersey numbers: the number model detects single digits, so it is run on each player's box
 (upscaled) and the digits found are joined into the player's number. In videos players are
 tracked across frames, and each track's number is a vote over every frame's reading, so it
 stays with the player through frames where it can't be read and one-off misreads are outvoted.
+With --number-reader resnet, the jersey ResNet (jersey_net.py, trained with train_jersey.py)
+reads each player's whole number from a crop of their torso instead, in one batched call.
+Reading numbers is most of the GPU work per frame, so with --jersey-stride N a player whose number
+is already settled is only read every Nth frame (players without a number are read every frame).
 """
 
 import argparse
@@ -29,6 +35,10 @@ from pathlib import Path
 import cv2
 import torch
 from ultralytics import YOLO
+from ultralytics.cfg import DEFAULT_CFG_DICT
+
+from jersey_net import JerseyReader, torso_box, torso_crop
+from video_io import FrameReader
 
 MODELS_DIR = Path(__file__).parent / "CV_Models"
 MODEL_NAMES = ["player", "puck", "number", "rink", "dots"]
@@ -66,9 +76,14 @@ DIGIT_NMS_IOU = 0.5         # overlapping digit boxes of different classes: keep
 DIGIT_Y_RANGE = (0.1, 0.62)
 DIGIT_HEIGHT_RANGE = (0.06, 0.3)
 MIN_READING_CONF = 0.4      # weaker readings don't vote
+TORSO_OVERLAP = 0.3         # jersey ResNet: skip a player when another player's box covers this much of their torso
 MIN_JERSEY_VOTES = 1.2      # summed confidence a track's number needs before it is shown
 PARTIAL_READ_WEIGHT = 0.5   # a one-digit read of a two-digit number (e.g. "2" of "12") counts this much
 SWITCH_RATIO = 1.5          # a track's shown number only changes when another scores this much higher
+# With --jersey-stride, a track's number counts as settled (and is read less often) once it has
+# this much summed confidence and leads the next best number by SETTLED_LEAD times.
+SETTLED_VOTES = 8.0
+SETTLED_LEAD = 3.0
 
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}
@@ -90,6 +105,27 @@ def model_path(name):
     return engine if engine.exists() else MODELS_DIR / f"{name}_model.pt"
 
 
+def fp16_kwargs(device):
+    """predict() arguments for FP16 .pt inference on an NVIDIA GPU (engines have their own precision).
+    Newer Ultralytics replaced `half` with `quantize`."""
+    if not (str(device).startswith("cuda") or str(device)[:1].isdigit()):
+        return {}
+    return {"quantize": 16} if "quantize" in DEFAULT_CFG_DICT else {"half": True}
+
+
+def engine_imgsz(path):
+    """The input size a TensorRT engine was built for ([h, w]), from the metadata Ultralytics
+    writes at the start of the file, or None for .pt weights or an engine without it."""
+    if path.suffix != ".engine":
+        return None
+    try:
+        with open(path, "rb") as f:
+            meta = json.loads(f.read(int.from_bytes(f.read(4), byteorder="little")).decode("utf-8"))
+        return None if meta.get("dynamic") else meta.get("imgsz")
+    except (ValueError, UnicodeDecodeError, AttributeError):
+        return None
+
+
 def load_model(name):
     path = model_path(name)
     if not path.exists():
@@ -97,10 +133,21 @@ def load_model(name):
     return YOLO(str(path), task="detect")
 
 
-def load_models(names):
+def load_models(names, number_reader="yolo", device=None):
+    """{name: model}. With number_reader "resnet", "number" is a JerseyReader instead of the YOLO
+    digit model."""
+    models = {}
     for name in names:
-        print(f"  {name}: {model_path(name).name}")
-    return {name: load_model(name) for name in names}
+        if name == "number" and number_reader == "resnet":
+            path = model_path("jersey")
+            if not path.exists():
+                sys.exit(f"Model not found: {path} (train it with train_jersey.py)")
+            print(f"  {name}: {path.name}")
+            models[name] = JerseyReader(path, device)
+        else:
+            print(f"  {name}: {model_path(name).name}")
+            models[name] = load_model(name)
+    return models
 
 
 def kept_classes(name, model):
@@ -111,12 +158,12 @@ def kept_classes(name, model):
     return [i for i, cls in model.names.items() if cls not in excluded]
 
 
-def run_on_frame(models, frame, conf, imgsz, device, track=False):
-    """Return {model_name: ultralytics Results} for a single BGR frame.
+def run_on_frame(models, frame, args, track=False):
+    """Return {model_name: ultralytics Results} for a single BGR frame, on the CPU.
 
-    `conf` is {model_name: threshold}. The number model isn't run here: it reads digits off the
-    player boxes, see read_jerseys(). With `track`, players get track ids that persist across
-    calls (one video at a time).
+    Thresholds and input sizes come from args.model_conf and args.model_imgsz. The number model
+    isn't run here: it reads digits off the player boxes, see read_jerseys(). With `track`,
+    players get track ids that persist across calls (one video at a time).
     """
     out = {}
     for name, model in models.items():
@@ -124,8 +171,9 @@ def run_on_frame(models, frame, conf, imgsz, device, track=False):
             continue
         run = model.track if track and name == "player" else model.predict
         kwargs = {"persist": True, "tracker": "bytetrack.yaml"} if run == model.track else {}
-        out[name] = run(frame, conf=conf[name], imgsz=imgsz, device=device,
-                        classes=kept_classes(name, model), verbose=False, **kwargs)[0]
+        # Results come back on the GPU; one copy to the CPU per model beats a sync per .tolist().
+        out[name] = run(frame, conf=args.model_conf[name], imgsz=args.model_imgsz[name], device=args.device,
+                        classes=kept_classes(name, model), verbose=False, **args.fp16, **kwargs)[0].cpu()
     return out
 
 
@@ -169,16 +217,19 @@ def assemble_number(digits):
     return number, sum(d["confidence"] for d in group) / len(group)
 
 
-def read_jerseys(number_model, frame, player_result, conf, device):
+def read_jerseys(number_model, frame, player_result, args, only=None):
     """Read each player's number this frame. Returns one dict per player box, in box order:
     {"digits": digit detections in frame coordinates, "reading": (number, conf) or None,
-    "number": the number to show, filled in by the caller}."""
+    "number": the number to show, filled in by the caller}. With `only` (a set of box indices),
+    the other players aren't read and get no digits or reading."""
+    if isinstance(number_model, JerseyReader):
+        return read_jerseys_resnet(number_model, frame, player_result, only)
     jerseys = [{"digits": [], "reading": None, "number": None} for _ in range(len(player_result.boxes))]
     crops, offsets = [], []
     h, w = frame.shape[:2]
     for i, box in enumerate(player_result.boxes.xyxy.tolist()):
         x1, y1, x2, y2 = max(0, int(box[0])), max(0, int(box[1])), min(w, int(box[2])), min(h, int(box[3]))
-        if y2 - y1 < MIN_NUMBER_CROP_PX or x2 <= x1:
+        if (only is not None and i not in only) or y2 - y1 < MIN_NUMBER_CROP_PX or x2 <= x1:
             continue
         crops.append(frame[y1:y2, x1:x2])
         offsets.append((i, x1, y1))
@@ -187,8 +238,9 @@ def read_jerseys(number_model, frame, player_result, conf, device):
     players = player_result.boxes.xyxy.tolist()
     results = []
     for start in range(0, len(crops), NUMBER_BATCH):
-        results += number_model.predict(crops[start:start + NUMBER_BATCH], conf=conf, imgsz=NUMBER_IMGSZ,
-                                        device=device, verbose=False)
+        results += [r.cpu() for r in number_model.predict(
+            crops[start:start + NUMBER_BATCH], conf=args.model_conf["number"], imgsz=NUMBER_IMGSZ,
+            device=args.device, verbose=False, **args.fp16)]
     for (i, ox, oy), r in zip(offsets, results):
         box_h = players[i][3] - players[i][1]
         for box, cls, score in zip(r.boxes.xyxy.tolist(), r.boxes.cls.tolist(), r.boxes.conf.tolist()):
@@ -208,6 +260,31 @@ def read_jerseys(number_model, frame, player_result, conf, device):
     return jerseys
 
 
+def read_jerseys_resnet(reader, frame, player_result, only=None):
+    """read_jerseys() with the jersey ResNet: one whole-number reading per player's torso crop,
+    and no digit boxes."""
+    jerseys = [{"digits": [], "reading": None, "number": None} for _ in range(len(player_result.boxes))]
+    players = player_result.boxes.xyxy.tolist()
+    crops, read = [], []
+    for i, box in enumerate(players):
+        if (only is not None and i not in only) or box[3] - box[1] < MIN_NUMBER_CROP_PX:
+            continue
+        # Where another player covers much of this one's torso, the number read could be theirs.
+        tx1, ty1, tx2, ty2 = torso_box(box)
+        area = max(1e-6, (tx2 - tx1) * (ty2 - ty1))
+        if any(max(0, min(tx2, b[2]) - max(tx1, b[0])) * max(0, min(ty2, b[3]) - max(ty1, b[1])) / area
+               > TORSO_OVERLAP for k, b in enumerate(players) if k != i):
+            continue
+        crop = torso_crop(frame, box)
+        if crop.shape[0] >= 8 and crop.shape[1] >= 8:
+            crops.append(crop)
+            read.append(i)
+    for i, (number, conf) in zip(read, reader.read(crops) if crops else []):
+        if number is not None and not number.startswith("0"):
+            jerseys[i]["reading"] = (number, conf)
+    return jerseys
+
+
 class JerseyVotes:
     """Per player track (any hashable key), the summed confidence of every number read on it. Once a track's number
     is shown it sticks to the player, whether or not the number is readable in later frames."""
@@ -220,15 +297,30 @@ class JerseyVotes:
         if track is not None and reading is not None and reading[1] >= MIN_READING_CONF:
             self.votes[track][reading[0]] += reading[1]
 
+    @staticmethod
+    def _score(votes, n):
+        # A two-digit number is also backed by reads that only caught one of its digits.
+        partial = sum(votes[d] for d in set(n) if d in votes) if len(n) == 2 else 0.0
+        return votes[n] + PARTIAL_READ_WEIGHT * partial
+
+    def settled(self, track):
+        """True once the shown number is so far ahead that more reads are very unlikely to change it."""
+        shown = self.shown.get(track)
+        if shown is None:
+            return False
+        votes = self.votes[track]
+        top = self._score(votes, shown)
+        # Digits of the shown number back it rather than compete with it.
+        rivals = [self._score(votes, n) for n in votes if n != shown and not (len(shown) == 2 and n in shown)]
+        return top >= SETTLED_VOTES and top >= SETTLED_LEAD * max(rivals, default=0.0)
+
     def number(self, track):
         votes = self.votes.get(track)
         if not votes:
             return None
 
         def score(n):
-            # A two-digit number is also backed by reads that only caught one of its digits.
-            partial = sum(votes[d] for d in set(n) if d in votes) if len(n) == 2 else 0.0
-            return votes[n] + PARTIAL_READ_WEIGHT * partial
+            return self._score(votes, n)
 
         best = max(votes, key=score)
         current = self.shown.get(track)
@@ -348,11 +440,11 @@ def process_image(path, models, args, out_dir):
     if frame is None:
         print(f"  Could not read {path}, skipping")
         return
-    results = run_on_frame(models, frame, args.model_conf, args.imgsz, args.device)
+    results = run_on_frame(models, frame, args)
     jerseys = None
     if "number" in models:
         # A single image has nothing to vote over, so each player shows this frame's reading.
-        jerseys = read_jerseys(models["number"], frame, results["player"], args.model_conf["number"], args.device)
+        jerseys = read_jerseys(models["number"], frame, results["player"], args)
         for j in jerseys:
             j["number"] = j["reading"][0] if j["reading"] else None
 
@@ -369,14 +461,12 @@ def process_image(path, models, args, out_dir):
 
 
 def process_video(path, models, args, out_dir):
-    cap = cv2.VideoCapture(str(path))
-    if not cap.isOpened():
+    try:
+        video = FrameReader(path, args.max_frames)
+    except OSError:
         print(f"  Could not open {path}, skipping")
         return
-    fps = cap.get(cv2.CAP_PROP_FPS) or 30
-    w = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
-    h = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
-    total = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
+    fps, w, h, total = video.fps, video.width, video.height, video.total
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writers = {}
@@ -391,23 +481,29 @@ def process_video(path, models, args, out_dir):
         models = dict(models, player=load_model("player"))
     votes = JerseyVotes()
 
-    all_detections = []
+    # Frames are written to detections.json as they're done (one per line) rather than held in
+    # memory, which a full game would fill on the Jetson. The array is closed even if the run is
+    # interrupted, so the frames done so far are still usable.
+    detections_file = open(out_dir / "detections.json", "w")
+    detections_file.write("[")
     idx = 0
     try:
-        while True:
-            ok, frame = cap.read()
-            if not ok or (args.max_frames and idx >= args.max_frames):
-                break
-            results = run_on_frame(models, frame, args.model_conf, args.imgsz, args.device, track=True)
+        for frame in video:
+            results = run_on_frame(models, frame, args, track=True)
             jerseys = None
             if "number" in models:
-                jerseys = read_jerseys(models["number"], frame, results["player"],
-                                       args.model_conf["number"], args.device)
                 # The tracker sometimes hands an id over to a nearby player; keying on the class
                 # too means a handover to the other team (or a referee) doesn't inherit the number.
                 r = results["player"]
                 keys = [None if tid is None else (tid, r.names[int(cls)])
                         for tid, cls in zip(track_ids(r), r.boxes.cls.tolist())]
+                # Players whose number is settled are only read every jersey_stride frames,
+                # staggered by track id so the reads are spread evenly over the frames.
+                only = None
+                if args.jersey_stride > 1:
+                    only = {i for i, key in enumerate(keys) if key is None or not votes.settled(key)
+                            or (idx + key[0]) % args.jersey_stride == 0}
+                jerseys = read_jerseys(models["number"], frame, r, args, only)
                 for key, j in zip(keys, jerseys):
                     votes.add(key, j["reading"])
                 for key, j in zip(keys, jerseys):
@@ -419,18 +515,18 @@ def process_video(path, models, args, out_dir):
                 if name in writers:
                     writers[name].write(per_model_frame(name, frame, results, jerseys))
 
-            all_detections.append({"frame": idx, "time_s": round(idx / fps, 3),
-                                   "detections": results_to_dicts(results, jerseys)})
+            detections_file.write(("\n" if idx == 0 else ",\n") + json.dumps(
+                {"frame": idx, "time_s": round(idx / fps, 3), "detections": results_to_dicts(results, jerseys)}))
             idx += 1
             if idx % 25 == 0 or idx == total:
                 print(f"\r  frame {idx}/{total or '?'}", end="", flush=True)
     finally:
-        cap.release()
+        detections_file.write("\n]\n")
+        detections_file.close()
+        video.close()
         for wr in writers.values():
             wr.release()
     print()
-
-    (out_dir / "detections.json").write_text(json.dumps(all_detections, indent=2))
 
 
 def collect_inputs(source):
@@ -456,11 +552,18 @@ def main():
     parser.add_argument("--no-video", dest="write_video", action="store_false",
                         help="Only write detections.json, no annotated images/videos (faster)")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop videos after N frames (0 = all)")
+    parser.add_argument("--number-reader", choices=["yolo", "resnet"], default="yolo",
+                        help="How jersey numbers are read: the YOLO digit detector (number_model) or the "
+                             "jersey ResNet (jersey_model, from train_jersey.py) (default: yolo)")
+    parser.add_argument("--jersey-stride", type=int, default=1,
+                        help="In videos, re-read a player's jersey number only every N frames once it is "
+                             "settled (default: 1, every frame; higher is faster)")
     args = parser.parse_args()
 
     if not args.source.exists():
         sys.exit(f"Source not found: {args.source}")
     args.device = pick_device(args.device)
+    args.fp16 = fp16_kwargs(args.device)
     args.model_conf = {name: MODEL_CONF.get(name, args.conf) for name in MODEL_NAMES}
     args.model_conf["puck"] = args.puck_conf
 
@@ -473,7 +576,8 @@ def main():
         sys.exit(f"No images or videos found in {args.source}")
 
     print(f"Loading models: {', '.join(args.models)} (device: {args.device})")
-    models = load_models(args.models)
+    models = load_models(args.models, args.number_reader, args.device)
+    args.model_imgsz = {name: engine_imgsz(model_path(name)) or args.imgsz for name in args.models}
 
     for path in inputs:
         out_dir = args.output / path.stem
