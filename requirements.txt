@@ -2,3 +2,4 @@ ultralytics>=8.3
 opencv-python
 torch
 lap>=0.5.12
+timm>=0.9

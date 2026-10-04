@@ -1,7 +1,9 @@
 """Build TensorRT engines from the models in CV_Models/, for running on the Jetson.
 
 Run this on the Jetson itself: an engine only works on the GPU and TensorRT version it was built
-with. Each engine is written next to its weights (CV_Models/<model>_model.engine), and
+with. Each engine is written next to its weights (CV_Models/<model>_model.engine, or
+new_player_model.engine / new_nano_puck.engine / new_dots.engine / new_rink_model.engine for the
+player / puck / dots / rink; the number and jersey engines in CV_Models/jersey_Num Models/), and
 run_models.py uses it in place of the .pt from then on. Building takes a few minutes per model.
 
     python export_engines.py                 # every model that doesn't have an engine yet, FP16
@@ -20,9 +22,12 @@ engine. run_models.py reads each engine's size from the engine itself. Engines b
 default were square: rebuild them with --force. To go back to the .pt weights, delete the
 .engine files.
 
-"jersey" is the jersey number ResNet from train_jersey.py (run_models.py --number-reader resnet).
-It is included by default once CV_Models/jersey_model.pt exists, and goes via ONNX
-(CV_Models/jersey_model.onnx) to an engine for batches of up to jersey_net.MAX_BATCH crops.
+Jersey numbers are read by PARSeq (parseq_jersey.py), which runs in PyTorch (FP16 on the GPU), so
+it needs no engine. "jersey" builds one for the jersey number ResNet from colab/train_jersey.py
+(run_models.py --number-reader resnet), only when asked for (--models jersey): via ONNX
+(CV_Models/jersey_Num Models/jersey_model.onnx) to an engine for batches of up to jersey_net.MAX_BATCH crops. The
+YOLO number model's engine is still built by default, for --number-reader yolo; skip it with
+--models player puck rink dots.
 """
 
 import argparse
@@ -33,7 +38,7 @@ from ultralytics import YOLO
 from ultralytics.cfg import DEFAULT_CFG_DICT
 
 import jersey_net
-from run_models import MODEL_NAMES, MODELS_DIR, NUMBER_BATCH, NUMBER_IMGSZ
+from run_models import JERSEY_DIR, MODEL_NAMES, NUMBER_BATCH, NUMBER_IMGSZ, model_dir, weights_stem
 
 EXPORTABLE = MODEL_NAMES + ["jersey"]
 
@@ -42,7 +47,9 @@ def export_jersey(args):
     """ONNX, then a TensorRT engine with a variable batch size, built with the TensorRT API."""
     import tensorrt as trt
 
-    onnx_path = jersey_net.export_onnx(MODELS_DIR / "jersey_model.pt", MODELS_DIR / "jersey_model.onnx")
+    checkpoint = jersey_net.checkpoint_path(JERSEY_DIR)
+    print(f"  from {checkpoint.name}")
+    onnx_path, input_hw = jersey_net.export_onnx(checkpoint, JERSEY_DIR / "jersey_model.onnx")
     logger = trt.Logger(trt.Logger.WARNING)
     builder = trt.Builder(logger)
     # TensorRT 10 is always explicit-batch; 8.x needs the flag.
@@ -58,13 +65,13 @@ def export_jersey(args):
     if not args.fp32:
         config.set_flag(trt.BuilderFlag.FP16)
     profile = builder.create_optimization_profile()
-    shape = lambda n: (n, 3, *jersey_net.INPUT_HW)
+    shape = lambda n: (n, 3, *input_hw)
     profile.set_shape("images", shape(1), shape(min(8, jersey_net.MAX_BATCH)), shape(jersey_net.MAX_BATCH))
     config.add_optimization_profile(profile)
     engine = builder.build_serialized_network(network, config)
     if engine is None:
         sys.exit("TensorRT could not build the jersey engine (see the errors above)")
-    path = MODELS_DIR / "jersey_model.engine"
+    path = JERSEY_DIR / "jersey_model.engine"
     path.write_bytes(engine)
     return path
 
@@ -72,8 +79,9 @@ def export_jersey(args):
 def main():
     parser = argparse.ArgumentParser(description="Export the Hockey-Vision models to TensorRT engines.")
     parser.add_argument("--models", nargs="+", choices=EXPORTABLE,
-                        default=MODEL_NAMES + (["jersey"] if (MODELS_DIR / "jersey_model.pt").exists() else []),
-                        help="Which models to export (default: all, jersey once jersey_model.pt exists)")
+                        default=MODEL_NAMES,
+                        help="Which models to export (default: player puck number rink dots; add jersey for "
+                             "the jersey ResNet)")
     parser.add_argument("--imgsz", type=int, nargs="+", default=[384, 640],
                         help="Input height and width (default: 384 640, for 16:9 video), or one value for square")
     parser.add_argument("--workspace", type=float, default=1.0,
@@ -83,9 +91,9 @@ def main():
     args = parser.parse_args()
 
     if not args.force:
-        for name in [n for n in args.models if (MODELS_DIR / f"{n}_model.engine").exists()]:
-            print(f"Skipping {name}: {name}_model.engine already exists (--force to rebuild)")
-        args.models = [n for n in args.models if not (MODELS_DIR / f"{n}_model.engine").exists()]
+        for name in [n for n in args.models if (model_dir(n) / f"{weights_stem(n)}.engine").exists()]:
+            print(f"Skipping {name}: {weights_stem(name)}.engine already exists (--force to rebuild)")
+        args.models = [n for n in args.models if not (model_dir(n) / f"{weights_stem(n)}.engine").exists()]
 
     if len(args.models) > 1:
         # One process per model, so each build starts with all of the Jetson's shared memory free.
@@ -112,7 +120,7 @@ def main():
         if name == "jersey":
             print(f"  -> {export_jersey(args)}")
             continue
-        path = YOLO(str(MODELS_DIR / f"{name}_model.pt")).export(**kwargs)
+        path = YOLO(str(model_dir(name) / f"{weights_stem(name)}.pt")).export(**kwargs)
         print(f"  -> {path}")
 
 

@@ -1,5 +1,5 @@
-"""A ResNet that reads a player's whole jersey number from a crop of their torso, an alternative
-to the YOLO digit detector (run_models.py --number-reader resnet).
+"""A ResNet that reads a player's whole jersey number from a crop of their torso: run_models.py's
+default jersey reader (the YOLO digit detector is the fallback, --number-reader yolo).
 
 One backbone with three heads, after Vats et al., "Multi-task learning for jersey number
 recognition in Ice Hockey" (2021):
@@ -10,11 +10,17 @@ The digit heads let a number that is rare in the training data borrow from its d
 common. decode() scores every number on all three heads.
 
 The model sees a fixed band of the player's box (TORSO_Y, the same band the digit detector's
-numbers sit in), resized to INPUT_HW. Training (train_jersey.py) and inference both go through
-prepare(), so the two always see identical crops.
+numbers sit in), resized to its input size: INPUT_HW unless it was trained at another
+(train_jersey.py --input-hw; each checkpoint and engine records its own). Training
+(colab/train_jersey.py) and inference both go through prepare(), so the two always see identical
+crops.
 
-Weights live in CV_Models/jersey_model.pt (a checkpoint from train_jersey.py) and, on the Jetson,
-CV_Models/jersey_model.engine (built by export_engines.py).
+Backbones (ARCHS): resnet18 and resnet34 (ImageNet V1 weights), and resnet50 (the stronger V2
+weights), which costs about 4x a resnet18 per crop at the same input size.
+
+Weights live in CV_Models/jersey_Num Models/jersey_model.pt (a checkpoint from colab/train_jersey.py; a name like
+jersey_model_resnet18.pt, as the Colab notebook saves it, works too) and, on the Jetson,
+CV_Models/jersey_Num Models/jersey_model.engine (built by export_engines.py).
 """
 
 import cv2
@@ -25,18 +31,25 @@ import torchvision
 
 NONE = 100   # number head: no readable number
 EMPTY = 10   # digit heads: no digit in this position
-INPUT_HW = (160, 128)    # torso crops are taller than wide
+INPUT_HW = (160, 128)    # default input size; torso crops are taller than wide
 TORSO_Y = (0.05, 0.75)   # fraction of the player box's height the torso crop covers
 MAX_BATCH = 16           # player crops per call; the TensorRT engine is built for up to this many
 MEAN = np.array([0.485, 0.456, 0.406], np.float32)  # ImageNet, what the pretrained backbone expects
 STD = np.array([0.229, 0.224, 0.225], np.float32)
-ARCHS = {"resnet18": torchvision.models.resnet18, "resnet34": torchvision.models.resnet34}
+# Backbone and its ImageNet weights. ResNet-50's V2 weights are noticeably better than its V1.
+ARCHS = {
+    "resnet18": (torchvision.models.resnet18, "IMAGENET1K_V1"),
+    "resnet34": (torchvision.models.resnet34, "IMAGENET1K_V1"),
+    "resnet50": (torchvision.models.resnet50, "IMAGENET1K_V2"),
+}
 
 
 class JerseyNet(nn.Module):
-    def __init__(self, arch="resnet34", pretrained=True):
+    def __init__(self, arch="resnet34", pretrained=True, input_hw=INPUT_HW):
         super().__init__()
-        self.backbone = ARCHS[arch](weights="IMAGENET1K_V1" if pretrained else None)
+        self.input_hw = tuple(input_hw)
+        build, weights = ARCHS[arch]
+        self.backbone = build(weights=weights if pretrained else None)
         features = self.backbone.fc.in_features
         self.backbone.fc = nn.Identity()
         self.dropout = nn.Dropout(0.2)
@@ -90,9 +103,9 @@ def torso_crop(img, box):
     return img[max(0, int(y1)):min(h, int(y2)), max(0, int(x1)):min(w, int(x2))]
 
 
-def prepare(crop):
-    """A BGR crop resized to the model's input, as RGB uint8 (augmentations apply to this)."""
-    crop = cv2.resize(crop, INPUT_HW[::-1], interpolation=cv2.INTER_AREA if crop.shape[0] > INPUT_HW[0]
+def prepare(crop, input_hw=INPUT_HW):
+    """A BGR crop resized to the model's input (height, width), as RGB uint8 (augmentations apply to this)."""
+    crop = cv2.resize(crop, tuple(input_hw)[::-1], interpolation=cv2.INTER_AREA if crop.shape[0] > input_hw[0]
                       else cv2.INTER_LINEAR)
     return cv2.cvtColor(crop, cv2.COLOR_BGR2RGB)
 
@@ -103,25 +116,34 @@ def normalize(batch):
     return ((x - torch.from_numpy(MEAN)) / torch.from_numpy(STD)).permute(0, 3, 1, 2).contiguous()
 
 
+def checkpoint_path(models_dir):
+    """models_dir/jersey_model.pt, or else the newest jersey_model_*.pt (the Colab notebook names
+    them after the architecture, e.g. jersey_model_resnet18.pt). The first if none exists."""
+    exact = models_dir / "jersey_model.pt"
+    if exact.exists():
+        return exact
+    found = sorted(models_dir.glob("jersey_model_*.pt"), key=lambda p: p.stat().st_mtime)
+    return found[-1] if found else exact
+
+
 def load_checkpoint(path, map_location="cpu"):
-    """A JerseyNet from a train_jersey.py checkpoint, in eval mode."""
+    """A JerseyNet from a colab/train_jersey.py checkpoint, in eval mode, at the input size it was trained at."""
     ckpt = torch.load(path, map_location=map_location)
-    if tuple(ckpt.get("input_hw", INPUT_HW)) != INPUT_HW:
-        raise ValueError(f"{path} was trained at {ckpt['input_hw']}, jersey_net.INPUT_HW is {INPUT_HW}")
-    model = JerseyNet(ckpt.get("arch", "resnet34"), pretrained=False)
+    model = JerseyNet(ckpt.get("arch", "resnet34"), pretrained=False, input_hw=ckpt.get("input_hw", INPUT_HW))
     model.load_state_dict(ckpt["state_dict"])
     return model.eval()
 
 
 def export_onnx(checkpoint, onnx_path):
-    """Export a checkpoint to ONNX with a variable batch size, for building a TensorRT engine."""
+    """Export a checkpoint to ONNX with a variable batch size, for building a TensorRT engine.
+    Returns (onnx_path, the model's input size)."""
     import inspect
     model = load_checkpoint(checkpoint)
     kwargs = {"dynamo": False} if "dynamo" in inspect.signature(torch.onnx.export).parameters else {}
-    torch.onnx.export(model, torch.zeros(1, 3, *INPUT_HW), str(onnx_path), input_names=["images"],
+    torch.onnx.export(model, torch.zeros(1, 3, *model.input_hw), str(onnx_path), input_names=["images"],
                       output_names=["number", "tens", "units"], opset_version=17,
                       dynamic_axes={n: {0: "batch"} for n in ("images", "number", "tens", "units")}, **kwargs)
-    return onnx_path
+    return onnx_path, model.input_hw
 
 
 class _TensorRTModel:
@@ -136,6 +158,7 @@ class _TensorRTModel:
             raise RuntimeError(f"Could not load {path}; rebuild it with export_engines.py --models jersey --force")
         self.context = self.engine.create_execution_context()
         self.max_batch = self.engine.get_tensor_profile_shape("images", 0)[2][0]
+        self.input_hw = tuple(self.engine.get_tensor_shape("images"))[2:]  # (-1, 3, H, W): only the batch varies
         self.stream = torch.cuda.Stream()
 
     def _dtype(self, name):
@@ -164,11 +187,13 @@ class JerseyReader:
         if path.suffix == ".engine":
             self.model = _TensorRTModel(path)
             self.max_batch = self.model.max_batch
+            self.input_hw = self.model.input_hw
             self.device, self.half = "cuda", False  # the engine has its own precision
         else:
             self.device = device
             self.half = str(device).startswith("cuda") or str(device)[:1].isdigit()
             self.model = load_checkpoint(path).to(device)
+            self.input_hw = self.model.input_hw
             if self.half:
                 self.model.half()
             self.max_batch = MAX_BATCH
@@ -178,7 +203,7 @@ class JerseyReader:
         """One (number or None, confidence) per BGR torso crop."""
         readings = []
         for start in range(0, len(crops), self.max_batch):
-            x = normalize(np.stack([prepare(c) for c in crops[start:start + self.max_batch]]))
+            x = normalize(np.stack([prepare(c, self.input_hw) for c in crops[start:start + self.max_batch]]))
             if not isinstance(self.model, _TensorRTModel):
                 x = x.to(self.device, torch.float16 if self.half else torch.float32)
             readings += decode(*self.model(x))

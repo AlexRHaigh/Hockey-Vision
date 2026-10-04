@@ -11,23 +11,49 @@ To run on an NVIDIA Jetson Orin Nano, see [jetson/README.md](jetson/README.md).
    `players.csv`, `puck.csv`, `frames.csv`, `tracks.csv` and `metadata.json`
    (see [jetson/README.md](jetson/README.md#exported-tables)).
 
-## Jersey number ResNet (optional)
+## Jersey numbers
 
-`run_models.py --number-reader resnet` reads each player's whole number from a crop of their torso
-with a ResNet (`jersey_net.py`), instead of detecting single digits with `number_model` and joining
-them. It feeds the same per-track number votes, so `--jersey-stride` and everything downstream
-work as before (`detections.json` has no digit boxes in `number` with it).
+`run_models.py` reads jersey numbers with PARSeq, the text recognizer from
+[Koshkina & Elder's jersey pipeline](https://github.com/mkoshkina/jersey-number-pipeline)
+(`parseq_jersey.py`, `CV_Models/jersey_Num Models/jersey.ckpt`: their hockey fine-tune). Their legibility classifier
+(`CV_Models/jersey_Num Models/legibility_resnet34_hockey_20240201.pth`) first checks each whole player crop for a
+readable number, and only those are read; without it PARSeq reads every player and answers "4" for
+many unreadable ones. PARSeq reads a fixed crop of the player's box (22-78% across, 15-45% down: where their pose model finds the
+shoulders-to-hips torso on our footage), restricted to digits, and each player track's readings are
+combined with their vote (readings under 0.2 confidence ignored, two-digit numbers favoured). It
+needs `timm` and the PARSeq code, which isn't on PyPI:
 
-To train it, starting from a YOLO digit dataset (one box per digit, classes `0`-`9`):
+```bash
+pip install -r requirements.txt
+pip install --no-deps git+https://github.com/baudm/parseq.git
+```
 
-1. `python make_jersey_labels.py path/to/dataset` turns the digit boxes into whole-number labels
-   (`labels.csv`). Pass `--torso` if the images are already torso crops rather than whole players.
-   Keep each game in a single split (train / valid / test), or validation accuracy means nothing.
-2. `python train_jersey.py path/to/dataset` trains a ResNet-34 (`--arch resnet18` for about half
-   the cost on the Jetson; `--torso` as above) on a Mac or an NVIDIA PC, and saves the best epoch to
-   `CV_Models/jersey_model.pt`. Watch the `numbered` accuracy: crops that show a number.
-3. Copy `CV_Models/jersey_model.pt` to the Jetson and build its engine with
-   `python export_engines.py --models jersey` (see [jetson/README.md](jetson/README.md)).
+### Rosters and player names
 
-Compare the two readers on the same clips by the number shown per track (`tracks.csv`), not by
-per-crop accuracy.
+Give the two teams' abbreviations, team_a's first (the player model's `team_a_player` / `goalie_a`
+classes), and jersey numbers are limited to what each team wears, players are named, and referees
+get no number:
+
+```bash
+python fetch_roster.py                                   # all 32 teams' active rosters -> rosters/nhl_active_players.csv
+python run_models.py videos/<clip>.mp4 --teams SJS MTL   # team_a = SJS, team_b = MTL
+python fetch_roster.py --game 2025020969                 # a past game: exactly who dressed
+python run_models.py videos/<clip>.mp4 --teams SJS MTL --roster rosters/2026-03-03_MTL_at_SJS.csv
+```
+
+PARSeq then reads the number its digit probabilities favour among that team's skaters' (or
+goalies') numbers, so impossible readings and dropped digits ("7" for 72) give way to numbers
+someone actually wears. `detections.json`, `positions.csv` and the exported `players.csv` /
+`tracks.csv` gain `team_abbrev` / `player_name`. On our two test clips this removed every wrong
+number (9 shown, 9 right) while reading as many players. The roster CSV has one row per player:
+`team, team_name, number, player, position, player_id, as_of`; refetch it as rosters change.
+
+Without `CV_Models/jersey_Num Models/jersey.ckpt`, or with `--number-reader yolo`, numbers are read by
+`number_model` instead, which detects single digits and joins them (only then does
+`detections.json` have digit boxes in `number`). Other readers, kept for comparison:
+
+| `--number-reader` | Model | Notes |
+|---|---|---|
+| `pipeline` | their whole pipeline (`jersey_pipeline.py`): Centroid-ReID filter (`centroid-reid.ckpt`), legibility classifier, ViTPose-H torso crop (`vitpose-h.pth`), PARSeq, their vote | most accurate per reading; ViTPose-H is ~250 GFLOPs per player, ~10x the cost |
+| `resnet` | jersey ResNet (`jersey_net.py`, `CV_Models/jersey_Num Models/jersey_model*.pt`), trained per [colab/README.md](colab/README.md) | fast; current weights read NHL jerseys poorly |
+| `temporal` | EfficientNet + LSTM from [Hugging Face](https://huggingface.co/Akashpaul123/jersey-number-recognition-temporal) (`temporal_jersey.py`, `CV_Models/jersey_Num Models/jersey_model.pth`) | trained on soccer with ten numbers |

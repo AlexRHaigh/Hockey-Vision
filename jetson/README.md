@@ -41,29 +41,33 @@ Jetson and survives the container.
 python export_engines.py
 ```
 
-This writes `CV_Models/<model>_model.engine` for each model (FP16), which `run_models.py` then
+This writes `CV_Models/<model>_model.engine` for each model (`new_player_model.engine`, `new_nano_puck.engine`, `new_dots.engine` and `new_rink_model.engine` for the player, puck, dots and rink, and the number model's in `CV_Models/jersey_Num Models/`; FP16), which `run_models.py` then
 uses automatically. It takes a while. The engines take 384x640 input (16:9 video at 640 wide), not
 640x640, which saves the ~40% of the work a square engine spends on padding; for video of another
 shape pass `--imgsz <height> <width>`. Engines built before this was the default are square:
 rebuild them with `python export_engines.py --force`.
 
-If you've trained the jersey number ResNet (`CV_Models/jersey_model.pt`, see the main
-[README](../README.md#jersey-number-resnet-optional)), `export_engines.py` also builds
-`jersey_model.engine` from it, via ONNX (`pip install onnx` in the container if the export says
-it's missing). Then add `--number-reader resnet` when running a clip. If a build runs out of memory, add swap on the Jetson
-and retry just that model with `--models <name>`.
+Jersey numbers are read by PARSeq (`CV_Models/jersey_Num Models/jersey.ckpt`) after a legibility check
+(`CV_Models/jersey_Num Models/legibility_resnet34_hockey_20240201.pth`); copy both over with the other models. PARSeq
+runs in PyTorch in FP16 and needs no engine; the Docker image installs its code (`timm` and
+the PARSeq repo), so rebuild the image if it predates that. The YOLO `number_model` engine is still
+built, for `--number-reader yolo`; skip it with `--models player puck rink dots`. If a build runs
+out of memory, add swap on the Jetson and retry just that model with `--models <name>`.
 
 ## 5. Run a clip
 
 ```bash
 jetson/run_clip.sh videos/<clip>.mp4                    # whole video
 jetson/run_clip.sh videos/<clip>.mp4 --max-frames 1800  # first 1800 frames only
+jetson/run_clip.sh videos/<clip>.mp4 --teams SJS MTL    # team_a, team_b: numbers from their rosters, players named
 ```
 
-This skips all annotated videos and re-reads a player's jersey number only every 5th frame once it
-is settled (`--jersey-stride 5`; reading numbers is most of the GPU work, and players without a
-number yet are still read every frame). Add `--jersey-stride 1` to read every frame. It writes,
-in `outputs/<clip>/`:
+`--teams` reads the rosters from `rosters/nhl_active_players.csv` (make it with
+`python fetch_roster.py`, which needs internet; copy it over if the Jetson is offline), or from a
+past game's file with `--roster rosters/<date>_<away>_at_<home>.csv` (`python fetch_roster.py --game <id>`).
+
+This skips all annotated videos and reads every player's jersey number with PARSeq on every
+frame. It writes, in `outputs/<clip>/`:
 
 | File | Contents |
 |---|---|

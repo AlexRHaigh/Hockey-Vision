@@ -58,6 +58,8 @@ COLUMNS = {
         "team": "A or B (empty for referees)",
         "role": "skater, goalie or referee",
         "jersey_number": "jersey number shown for the track at this frame (empty if not read yet)",
+        "team_abbrev": "the player's team, e.g. SJS (only with run_models.py --teams)",
+        "player_name": "the player wearing jersey_number for that team (only with run_models.py --teams)",
         "confidence": "player detection confidence",
         "box_x1": "image box left, px", "box_y1": "image box top, px",
         "box_x2": "image box right, px", "box_y2": "image box bottom, px",
@@ -93,6 +95,8 @@ COLUMNS = {
         "team": "A or B (empty for referees)",
         "role": "skater, goalie or referee",
         "jersey_number": "most frequently shown jersey number (empty if never read)",
+        "team_abbrev": "the track's team, e.g. SJS (only with run_models.py --teams)",
+        "player_name": "the player wearing jersey_number for that team (only with run_models.py --teams)",
         "first_frame": "first frame the track was detected",
         "last_frame": "last frame the track was detected",
         "first_time_s": "time of first_frame, s",
@@ -171,7 +175,8 @@ def export_clip(clip_dir):
             players.append({
                 "clip": clip, "frame": idx, "time_s": t, "track_id": d.get("track_id"),
                 "class": d["class"], "team": team, "role": role,
-                "jersey_number": d.get("jersey_number"), "confidence": d["confidence"],
+                "jersey_number": d.get("jersey_number"), "team_abbrev": d.get("team"),
+                "player_name": d.get("player_name"), "confidence": d["confidence"],
                 "box_x1": x1, "box_y1": y1, "box_x2": x2, "box_y2": y2,
                 "x_ft": rink_xy[0], "y_ft": rink_xy[1],
             })
@@ -259,11 +264,16 @@ def summarise_tracks(clip, players):
         cls = Counter(r["class"] for r in rows).most_common(1)[0][0]
         team, role = PLAYER_ROLES[cls]
         numbers = Counter(r["jersey_number"] for r in rows if r["jersey_number"])
+        number = numbers.most_common(1)[0][0] if numbers else None
+        named = [r for r in rows if r["jersey_number"] == number and r["player_name"]]
+        abbrevs = Counter(r["team_abbrev"] for r in rows if r["team_abbrev"])
         on_rink = [r for r in rows if r["x_ft"] is not None]
         distance, seconds = track_distance(rows)
         out.append({
             "clip": clip, "track_id": tid, "class": cls, "team": team, "role": role,
-            "jersey_number": numbers.most_common(1)[0][0] if numbers else None,
+            "jersey_number": number,
+            "team_abbrev": abbrevs.most_common(1)[0][0] if abbrevs else None,
+            "player_name": named[0]["player_name"] if named else None,
             "first_frame": rows[0]["frame"], "last_frame": rows[-1]["frame"],
             "first_time_s": rows[0]["time_s"], "last_time_s": rows[-1]["time_s"],
             "frames_detected": len(rows), "frames_on_rink": len(on_rink),

@@ -11,7 +11,8 @@ Run on an existing run_models.py output:
 This writes, next to the detections file:
     side_by_side.mp4  the original video, unannotated, with the top-down rink view beside it
     positions.json    per frame: the homography, keypoints used, and player / puck rink positions
-    positions.csv     one row per player or puck per frame: rink x, y in feet (and track id, jersey number)
+    positions.csv     one row per player or puck per frame: rink x, y in feet (and track id, jersey
+                      number, and player name when run_models.py was given --teams)
     homographies.csv  one row per frame: the 3x3 image -> rink homography, h00..h22 (empty if no fit)
 With --no-video the video is skipped. With --debug it also writes radar.mp4 (top-down view with
 the keypoints the fit used) and overlay.mp4 (rink keypoints reprojected onto the video, to check
@@ -82,6 +83,7 @@ class Box:
         self.conf = det["confidence"]
         self.x1, self.y1, self.x2, self.y2 = det["box_xyxy"]
         self.jersey_number = det.get("jersey_number")
+        self.player_name = det.get("player_name")  # with run_models.py --teams
         self.track_id = det.get("track_id")
 
     @property
@@ -604,6 +606,7 @@ def project_players(detections, H):
         # Anything well outside the boards is a bad projection (or a player on the bench).
         if abs(x) <= rink.HALF_LENGTH + 5 and abs(y) <= rink.HALF_WIDTH + 5:
             out.append({"class": p.cls, "confidence": p.conf, "jersey_number": p.jersey_number,
+                        "player_name": p.player_name,
                         "track_id": p.track_id, "box_xyxy": [p.x1, p.y1, p.x2, p.y2],
                         "rink_xy": [round(float(np.clip(x, -rink.HALF_LENGTH, rink.HALF_LENGTH)), 2),
                                     round(float(np.clip(y, -rink.HALF_WIDTH, rink.HALF_WIDTH)), 2)]})
@@ -655,7 +658,7 @@ def project_puck(detections, H):
 
 BOARDS_COLOR_NO_FIT = (40, 40, 220)  # BGR red: the rink outline when this frame has no usable fit
 PUCK_COLOR = (0, 0, 0)
-PUCK_RING_COLOR = (0, 220, 255)  # BGR yellow ring so the puck stands out from the referees
+PUCK_RING_COLOR = (0, 220, 255)  # BGR yellow ring so the black puck stands out on the rink
 
 
 def no_fit_template(template):
@@ -671,13 +674,20 @@ def no_fit_template(template):
     return img.astype(np.uint8)
 
 
+# Referees are only detected so they aren't mistaken for players; they're left off the top-down view.
+HIDDEN_ON_RADAR = {"referee"}
+
+
 def draw_radar(template, players, puck=None, matches=()):
     """Draw players (and the puck) on the rink template, with each player's jersey number in their
-    dot when it's known. `matches`, if given, also draws the keypoints the fit used, for debugging."""
+    dot when it's known. Referees aren't drawn. `matches`, if given, also draws the keypoints the
+    fit used, for debugging."""
     img = template.copy()
     if matches:
         img = rink.draw_keypoints(img, names={m.keypoint for m in matches}, labels=False)
     for p in players:
+        if p["class"] in HIDDEN_ON_RADAR:
+            continue
         x, y = map(int, np.round(rink.rink_to_template(p["rink_xy"])[0]))
         number = p.get("jersey_number")
         radius = 13 if number else 9  # room for the jersey number inside the dot
@@ -733,15 +743,16 @@ def write_csvs(positions, out_dir):
     """Flat versions of positions.json, for spreadsheets and pandas."""
     with open(out_dir / "positions.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["frame", "time_s", "object", "track_id", "class", "jersey_number", "confidence",
-                    "x_ft", "y_ft"])
+        w.writerow(["frame", "time_s", "object", "track_id", "class", "jersey_number", "player_name",
+                    "confidence", "x_ft", "y_ft"])
         for p in positions:
             for pl in p["players"]:
                 tid = pl.get("track_id")
                 w.writerow([p["frame"], p["time_s"], "player", "" if tid is None else tid, pl["class"],
-                            pl.get("jersey_number") or "", pl["confidence"], *pl["rink_xy"]])
+                            pl.get("jersey_number") or "", pl.get("player_name") or "", pl["confidence"],
+                            *pl["rink_xy"]])
             if p["puck"] is not None:
-                w.writerow([p["frame"], p["time_s"], "puck", "", "puck", "", p["puck"]["confidence"],
+                w.writerow([p["frame"], p["time_s"], "puck", "", "puck", "", "", p["puck"]["confidence"],
                             *p["puck"]["rink_xy"]])
     with open(out_dir / "homographies.csv", "w", newline="") as f:
         w = csv.writer(f)
