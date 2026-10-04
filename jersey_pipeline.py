@@ -1,13 +1,13 @@
 """Koshkina & Elder's jersey number pipeline (github.com/mkoshkina/jersey-number-pipeline), run
 per player track inside run_models.py (--number-reader pipeline). Per player crop:
 
-    1. Centroid-ReID (CV_Models/jersey_Num Models/centroid-reid.ckpt, ResNet-50 trained on Market-1501) embeds the
+    1. Centroid-ReID (CV_Models/unused_models/jersey_Num Models/centroid-reid.ckpt, ResNet-50 trained on Market-1501) embeds the
        crop. Crops far from the rest of the track's crops (another player, an occlusion) are
        dropped, with their Gaussian outlier test: 3 rounds, threshold 3.5 (gaussian_outliers.py).
-    2. ViTPose-H (CV_Models/jersey_Num Models/vitpose-h.pth, COCO keypoints) finds the shoulders and hips. Without
+    2. ViTPose-H (CV_Models/unused_models/jersey_Num Models/vitpose-h.pth, COCO keypoints) finds the shoulders and hips. Without
        all four at confidence >= 0.4 the crop is skipped; otherwise the torso is cut from the
        shoulders to the hips, padded 5 px (helpers.generate_crops).
-    3. PARSeq (CV_Models/jersey_Num Models/jersey.ckpt, their hockey fine-tune; parseq_jersey.py) reads the digits.
+    3. PARSeq (CV_Models/unused_models/jersey_Num Models/jersey.ckpt, their hockey fine-tune; parseq_jersey.py) reads the digits.
     4. The track's readings are combined as theirs are (helpers.process_jersey_id_predictions with
        useBias): readings under 0.2 confidence count for nothing, two-digit numbers weigh 0.61 and
        one-digit 0.39, and a number needs a summed weight above 1 (parseq_jersey.TrackletVotes).
@@ -15,7 +15,7 @@ per player track inside run_models.py (--number-reader pipeline). Per player cro
 run_models.py's default reader, parseq_jersey.py, is steps 3 and 4 on a fixed crop placed where
 ViTPose puts the torso: on our test clips nearly as accurate, at a tenth of the cost.
 
-Between steps 1 and 2, their legibility classifier (CV_Models/jersey_Num Models/legibility_resnet34_hockey_*.pth,
+Between steps 1 and 2, their legibility classifier (CV_Models/unused_models/jersey_Num Models/legibility_resnet34_hockey_*.pth,
 trained with the SAM optimizer, github.com/davda54/sam) drops crops without a readable number, so
 ViTPose doesn't run on them. Their pipeline runs offline on whole tracklets; here each crop is
 judged against the track's crops so far. ViTPose runs without flip testing, which would double its

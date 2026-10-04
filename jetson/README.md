@@ -19,10 +19,13 @@ Put the image and the outputs on the NVMe drive if the Jetson has one; the image
 
 ## 2. Copy the models and videos over (from your Mac)
 
-`CV_Models/` and `videos/` aren't in git.
+The models in `CV_Models/Models/` (see [CV_Models/README.md](../CV_Models/README.md)) and `videos/`
+aren't in git. `CV_Models/unused_models/` (~3.7 GB of models the pipeline no longer uses) is left
+behind:
 
 ```bash
-scp -r CV_Models videos <user>@<jetson-ip>:~/Hockey-Vision/
+rsync -a CV_Models/Models <user>@<jetson-ip>:~/Hockey-Vision/CV_Models/
+rsync -a videos <user>@<jetson-ip>:~/Hockey-Vision/
 ```
 
 ## 3. Start the container
@@ -41,18 +44,17 @@ Jetson and survives the container.
 python export_engines.py
 ```
 
-This writes `CV_Models/<model>_model.engine` for each model (`new_player_model.engine`, `new_nano_puck.engine`, `new_dots.engine` and `new_rink_model.engine` for the player, puck, dots and rink, and the number model's in `CV_Models/jersey_Num Models/`; FP16), which `run_models.py` then
+This writes `CV_Models/Models/<model>_model.engine` for each model (`new_player_model.engine`, `new_nano_puck.engine`, `new_dots.engine`, `new_rink_model.engine` and `new_nums.engine` for the player, puck, dots, rink and number models; FP16), which `run_models.py` then
 uses automatically. It takes a while. The engines take 384x640 input (16:9 video at 640 wide), not
 640x640, which saves the ~40% of the work a square engine spends on padding; for video of another
 shape pass `--imgsz <height> <width>`. Engines built before this was the default are square:
 rebuild them with `python export_engines.py --force`.
 
-Jersey numbers are read by PARSeq (`CV_Models/jersey_Num Models/jersey.ckpt`) after a legibility check
-(`CV_Models/jersey_Num Models/legibility_resnet34_hockey_20240201.pth`); copy both over with the other models. PARSeq
-runs in PyTorch in FP16 and needs no engine; the Docker image installs its code (`timm` and
-the PARSeq repo), so rebuild the image if it predates that. The YOLO `number_model` engine is still
-built, for `--number-reader yolo`; skip it with `--models player puck rink dots`. If a build runs
-out of memory, add swap on the Jetson and retry just that model with `--models <name>`.
+Jersey numbers are read by the YOLO number model (`CV_Models/Models/new_nums.pt`), whose engine is built
+with the others. The older readers' models (`CV_Models/unused_models/jersey_Num Models/`) are only
+needed for `--number-reader parseq`, `pipeline`, `resnet` or `temporal`, so they don't need copying
+to the Jetson. If a build runs out of memory, add swap on the Jetson and retry just that model with
+`--models <name>`.
 
 ## 5. Run a clip
 

@@ -18,9 +18,9 @@ crops.
 Backbones (ARCHS): resnet18 and resnet34 (ImageNet V1 weights), and resnet50 (the stronger V2
 weights), which costs about 4x a resnet18 per crop at the same input size.
 
-Weights live in CV_Models/jersey_Num Models/jersey_model.pt (a checkpoint from colab/train_jersey.py; a name like
+Weights live in CV_Models/unused_models/jersey_Num Models/jersey_model.pt (a checkpoint from colab/train_jersey.py; a name like
 jersey_model_resnet18.pt, as the Colab notebook saves it, works too) and, on the Jetson,
-CV_Models/jersey_Num Models/jersey_model.engine (built by export_engines.py).
+CV_Models/unused_models/jersey_Num Models/jersey_model.engine (built by export_engines.py).
 """
 
 import cv2

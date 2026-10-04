@@ -1,9 +1,10 @@
-"""Build TensorRT engines from the models in CV_Models/, for running on the Jetson.
+"""Build TensorRT engines from the models in CV_Models/Models/, for running on the Jetson.
 
 Run this on the Jetson itself: an engine only works on the GPU and TensorRT version it was built
-with. Each engine is written next to its weights (CV_Models/<model>_model.engine, or
-new_player_model.engine / new_nano_puck.engine / new_dots.engine / new_rink_model.engine for the
-player / puck / dots / rink; the number and jersey engines in CV_Models/jersey_Num Models/), and
+with. Each engine is written next to its weights (CV_Models/Models/<model>_model.engine, or
+new_player_model.engine / new_nano_puck.engine / new_dots.engine / new_rink_model.engine /
+new_nums.engine for the player / puck / dots / rink / number models; the jersey ResNet's in
+CV_Models/unused_models/jersey_Num Models/), and
 run_models.py uses it in place of the .pt from then on. Building takes a few minutes per model.
 
     python export_engines.py                 # every model that doesn't have an engine yet, FP16
@@ -22,12 +23,11 @@ engine. run_models.py reads each engine's size from the engine itself. Engines b
 default were square: rebuild them with --force. To go back to the .pt weights, delete the
 .engine files.
 
-Jersey numbers are read by PARSeq (parseq_jersey.py), which runs in PyTorch (FP16 on the GPU), so
-it needs no engine. "jersey" builds one for the jersey number ResNet from colab/train_jersey.py
-(run_models.py --number-reader resnet), only when asked for (--models jersey): via ONNX
-(CV_Models/jersey_Num Models/jersey_model.onnx) to an engine for batches of up to jersey_net.MAX_BATCH crops. The
-YOLO number model's engine is still built by default, for --number-reader yolo; skip it with
---models player puck rink dots.
+Jersey numbers are read by the YOLO number model (new_nums.pt), whose engine is built by default
+for batches of up to NUMBER_BATCH player crops. "jersey" builds one for the older jersey number
+ResNet from colab/train_jersey.py (run_models.py --number-reader resnet), only when asked for
+(--models jersey): via ONNX (CV_Models/unused_models/jersey_Num Models/jersey_model.onnx) to an
+engine for batches of up to jersey_net.MAX_BATCH crops.
 """
 
 import argparse

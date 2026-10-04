@@ -1,8 +1,8 @@
 """Jersey numbers read as text by PARSeq, the scene-text recognizer from Koshkina & Elder's jersey
-number pipeline (github.com/mkoshkina/jersey-number-pipeline), from CV_Models/jersey_Num Models/jersey.ckpt. This is
+number pipeline (github.com/mkoshkina/jersey-number-pipeline), from CV_Models/unused_models/jersey_Num Models/jersey.ckpt. This is
 run_models.py's default jersey reader (--number-reader parseq).
 
-Per player, their legibility classifier (CV_Models/jersey_Num Models/legibility_resnet34_hockey_*.pth) first decides
+Per player, their legibility classifier (CV_Models/unused_models/jersey_Num Models/legibility_resnet34_hockey_*.pth) first decides
 from the whole player crop whether a number is readable at all; PARSeq only reads players it
 passes. Without it PARSeq reads every player, and on blurred or turned players it tends to answer
 "4" with high confidence. PARSeq reads a fixed crop of the player's box (CROP_BOX): where their

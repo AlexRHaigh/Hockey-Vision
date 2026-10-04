@@ -1,6 +1,6 @@
 """Jersey numbers from a sequence of crops of one player: the EfficientNet-B0 + LSTM model from
 huggingface.co/Akashpaul123/jersey-number-recognition-temporal (Apache-2.0), in
-CV_Models/jersey_Num Models/jersey_model.pth (run_models.py --number-reader temporal).
+CV_Models/unused_models/jersey_Num Models/jersey_model.pth (run_models.py --number-reader temporal).
 
 The model reads 8 whole-player crops (squashed to 128x128) of the same player and predicts the
 tens and units digit; a tens digit of 0 means a one-digit number. It has no "no number" output,
