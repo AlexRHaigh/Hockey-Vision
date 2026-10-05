@@ -1,0 +1,773 @@
+team,team_name,number,player,position,player_id,as_of
+ANA,Anaheim Ducks,1,Lukas Dostal,Goalie,8480843,2026-10-01
+ANA,Anaheim Ducks,2,Jackson LaCombe,Defense,8481605,2026-10-01
+ANA,Anaheim Ducks,3,Ian Moore,Defense,8482178,2026-10-01
+ANA,Anaheim Ducks,4,Nick Jensen,Defense,8475324,2026-10-01
+ANA,Anaheim Ducks,12,Sam Colangelo,Right wing,8482118,2026-10-01
+ANA,Anaheim Ducks,13,Nikita Nesterenko,Center,8481754,2026-10-01
+ANA,Anaheim Ducks,14,Drew Helleson,Defense,8481563,2026-10-01
+ANA,Anaheim Ducks,17,Alex Killorn,Left wing,8473986,2026-10-01
+ANA,Anaheim Ducks,18,A.J. Greer,Left wing,8478421,2026-10-01
+ANA,Anaheim Ducks,25,Ryan Poehling,Center,8480068,2026-10-01
+ANA,Anaheim Ducks,26,Corey Schueneman,Defense,8481461,2026-10-01
+ANA,Anaheim Ducks,28,Judd Caulfield,Right wing,8481538,2026-10-01
+ANA,Anaheim Ducks,31,Laurent Brossoit,Goalie,8476316,2026-10-01
+ANA,Anaheim Ducks,33,Ville Husso,Goalie,8478024,2026-10-01
+ANA,Anaheim Ducks,34,Travis Mitchell,Defense,8484262,2026-10-01
+ANA,Anaheim Ducks,37,Jett Woo,Defense,8480808,2026-10-01
+ANA,Anaheim Ducks,38,James Hamblin,Left wing,8480468,2026-10-01
+ANA,Anaheim Ducks,39,Jeff Malott,Left wing,8482408,2026-10-01
+ANA,Anaheim Ducks,40,Nikita Klepov,Right wing,8486052,2026-10-01
+ANA,Anaheim Ducks,42,Tim Washe,Center,8485512,2026-10-01
+ANA,Anaheim Ducks,43,Marcus Nordmark,Left wing,8486072,2026-10-01
+ANA,Anaheim Ducks,45,Beckett Sennecke,Right wing,8484762,2026-10-01
+ANA,Anaheim Ducks,47,Noah Warren,Defense,8483521,2026-10-01
+ANA,Anaheim Ducks,50,Stian Solberg,Defense,8484859,2026-10-01
+ANA,Anaheim Ducks,55,Tyson Hinds,Defense,8482731,2026-10-01
+ANA,Anaheim Ducks,59,Sean Farrell,Center,8482081,2026-10-01
+ANA,Anaheim Ducks,61,Cutter Gauthier,Left wing,8483445,2026-10-01
+ANA,Anaheim Ducks,64,Mikael Granlund,Center,8475798,2026-10-01
+ANA,Anaheim Ducks,67,Tristan Luneau,Defense,8483482,2026-10-01
+ANA,Anaheim Ducks,77,Frank Vatrano,Right wing,8478366,2026-10-01
+ANA,Anaheim Ducks,91,Leo Carlsson,Center,8484153,2026-10-01
+ANA,Anaheim Ducks,95,Roger McQueen,Center,8485400,2026-10-01
+ANA,Anaheim Ducks,98,Pavel Mintyukov,Defense,8483490,2026-10-01
+BOS,Boston Bruins,1,Jeremy Swayman,Goalie,8480280,2026-10-01
+BOS,Boston Bruins,6,Mason Lohrei,Defense,8482511,2026-10-01
+BOS,Boston Bruins,10,JJ Peterka,Right wing,8482175,2026-10-01
+BOS,Boston Bruins,11,Casey Mittelstadt,Center,8479999,2026-10-01
+BOS,Boston Bruins,17,Will Borgen,Defense,8478840,2026-10-01
+BOS,Boston Bruins,18,Pavel Zacha,Center,8478401,2026-10-01
+BOS,Boston Bruins,27,Hampus Lindholm,Defense,8476854,2026-10-01
+BOS,Boston Bruins,28,Elias Lindholm,Center,8477496,2026-10-01
+BOS,Boston Bruins,30,Michael DiPietro,Goalie,8480022,2026-10-01
+BOS,Boston Bruins,39,Morgan Geekie,Center,8479987,2026-10-01
+BOS,Boston Bruins,42,Frederic Brunet,Defense,8483017,2026-10-01
+BOS,Boston Bruins,44,James Hagens,Center,8485395,2026-10-01
+BOS,Boston Bruins,45,Jonathan Aspirot,Defense,8481219,2026-10-01
+BOS,Boston Bruins,47,Mark Kastelic,Center,8480355,2026-10-01
+BOS,Boston Bruins,52,Sean Kuraly,Center,8476374,2026-10-01
+BOS,Boston Bruins,73,Charlie McAvoy,Defense,8479325,2026-10-01
+BOS,Boston Bruins,75,Connor Clifton,Defense,8477365,2026-10-01
+BOS,Boston Bruins,81,Michael Eyssimont,Center,8479591,2026-10-01
+BOS,Boston Bruins,84,Tanner Jeannot,Left wing,8479661,2026-10-01
+BOS,Boston Bruins,88,David Pastrnak,Right wing,8477956,2026-10-01
+BOS,Boston Bruins,91,Nikita Zadorov,Defense,8477507,2026-10-01
+BOS,Boston Bruins,92,Marat Khusnutdinov,Center,8482177,2026-10-01
+BOS,Boston Bruins,93,Fraser Minten,Center,8483489,2026-10-01
+BUF,Buffalo Sabres,1,Ukko-Pekka Luukkonen,Goalie,8480045,2026-10-01
+BUF,Buffalo Sabres,6,Zach Benson,Left wing,8484145,2026-10-01
+BUF,Buffalo Sabres,8,Olen Zellweger,Defense,8482803,2026-10-01
+BUF,Buffalo Sabres,9,Josh Norris,Center,8480064,2026-10-01
+BUF,Buffalo Sabres,10,Sam Carrick,Center,8475842,2026-10-01
+BUF,Buffalo Sabres,15,Justin Danforth,Right wing,8479941,2026-10-01
+BUF,Buffalo Sabres,19,Peyton Krebs,Center,8481522,2026-10-01
+BUF,Buffalo Sabres,20,Jiri Kulich,Center,8483468,2026-10-01
+BUF,Buffalo Sabres,21,Conor Timmins,Defense,8479982,2026-10-01
+BUF,Buffalo Sabres,22,Jack Quinn,Right wing,8482097,2026-10-01
+BUF,Buffalo Sabres,23,Mattias Samuelsson,Defense,8480807,2026-10-01
+BUF,Buffalo Sabres,24,Matt Grzelcyk,Defense,8476891,2026-10-01
+BUF,Buffalo Sabres,25,Owen Power,Defense,8482671,2026-10-01
+BUF,Buffalo Sabres,26,Rasmus Dahlin,Defense,8480839,2026-10-01
+BUF,Buffalo Sabres,29,Beck Malenstyn,Left wing,8479359,2026-10-01
+BUF,Buffalo Sabres,34,Alex Lyon,Goalie,8479312,2026-10-01
+BUF,Buffalo Sabres,44,Dennis Gilbert,Defense,8478502,2026-10-01
+BUF,Buffalo Sabres,46,Louis Crevier,Defense,8481806,2026-10-01
+BUF,Buffalo Sabres,48,Tyson Kozak,Center,8482896,2026-10-01
+BUF,Buffalo Sabres,71,Ryan McLeod,Center,8480802,2026-10-01
+BUF,Buffalo Sabres,72,Tage Thompson,Center,8479420,2026-10-01
+BUF,Buffalo Sabres,73,Zach Metsa,Defense,8484305,2026-10-01
+BUF,Buffalo Sabres,86,Noah Ostlund,Center,8483500,2026-10-01
+BUF,Buffalo Sabres,91,Josh Doan,Right wing,8482659,2026-10-01
+BUF,Buffalo Sabres,92,Colten Ellis,Goalie,8481551,2026-10-01
+BUF,Buffalo Sabres,94,Konsta Helenius,Center,8484797,2026-10-01
+CAR,Carolina Hurricanes,4,Shayne Gostisbehere,Defense,8476906,2026-10-01
+CAR,Carolina Hurricanes,5,Jalen Chatfield,Defense,8478970,2026-10-01
+CAR,Carolina Hurricanes,6,Mike Reilly,Defense,8476422,2026-10-01
+CAR,Carolina Hurricanes,11,Jordan Staal,Center,8473533,2026-10-01
+CAR,Carolina Hurricanes,19,K'Andre Miller,Defense,8480817,2026-10-01
+CAR,Carolina Hurricanes,20,Sebastian Aho,Center,8478427,2026-10-01
+CAR,Carolina Hurricanes,22,Logan Stankoven,Center,8482702,2026-10-01
+CAR,Carolina Hurricanes,26,Sean Walker,Defense,8480336,2026-10-01
+CAR,Carolina Hurricanes,27,Nikolaj Ehlers,Left wing,8477940,2026-10-01
+CAR,Carolina Hurricanes,28,William Carrier,Left wing,8477478,2026-10-01
+CAR,Carolina Hurricanes,32,Brandon Bussi,Goalie,8483548,2026-10-01
+CAR,Carolina Hurricanes,37,Andrei Svechnikov,Right wing,8480830,2026-10-01
+CAR,Carolina Hurricanes,44,Nicolas Deslauriers,Left wing,8475235,2026-10-01
+CAR,Carolina Hurricanes,48,Jordan Martinook,Left wing,8476921,2026-10-01
+CAR,Carolina Hurricanes,50,Eric Robinson,Left wing,8480762,2026-10-01
+CAR,Carolina Hurricanes,52,Pyotr Kochetkov,Goalie,8481611,2026-10-01
+CAR,Carolina Hurricanes,53,Jackson Blake,Right wing,8482809,2026-10-01
+CAR,Carolina Hurricanes,62,Charles Alexis Legault,Defense,8484428,2026-10-01
+CAR,Carolina Hurricanes,71,Taylor Hall,Left wing,8475791,2026-10-01
+CAR,Carolina Hurricanes,74,Jaccob Slavin,Defense,8476958,2026-10-01
+CAR,Carolina Hurricanes,77,Mark Jankowski,Left wing,8476873,2026-10-01
+CAR,Carolina Hurricanes,82,Jesperi Kotkaniemi,Center,8480829,2026-10-01
+CBJ,Columbus Blue Jackets,2,Jake Christiansen,Defense,8481161,2026-10-01
+CBJ,Columbus Blue Jackets,3,Charlie Coyle,Center,8475745,2026-10-01
+CBJ,Columbus Blue Jackets,4,Cole Sillinger,Center,8482705,2026-10-01
+CBJ,Columbus Blue Jackets,5,Denton Mateychuk,Defense,8483485,2026-10-01
+CBJ,Columbus Blue Jackets,7,Carson Soucy,Defense,8477369,2026-10-01
+CBJ,Columbus Blue Jackets,8,Zach Werenski,Defense,8478460,2026-10-01
+CBJ,Columbus Blue Jackets,9,Ivan Provorov,Defense,8478500,2026-10-01
+CBJ,Columbus Blue Jackets,10,Dmitri Voronkov,Left wing,8481716,2026-10-01
+CBJ,Columbus Blue Jackets,15,Dante Fabbro,Defense,8479371,2026-10-01
+CBJ,Columbus Blue Jackets,19,Adam Fantilli,Center,8484166,2026-10-01
+CBJ,Columbus Blue Jackets,23,Sean Monahan,Center,8477497,2026-10-01
+CBJ,Columbus Blue Jackets,24,Mathieu Olivier,Right wing,8479671,2026-10-01
+CBJ,Columbus Blue Jackets,33,Cam Talbot,Goalie,8475660,2026-10-01
+CBJ,Columbus Blue Jackets,36,Emil Andrae,Defense,8482126,2026-10-01
+CBJ,Columbus Blue Jackets,43,Valeri Nichushkin,Right wing,8477501,2026-10-01
+CBJ,Columbus Blue Jackets,44,Erik Gudbranson,Defense,8475790,2026-10-01
+CBJ,Columbus Blue Jackets,58,Danton Heinen,Left wing,8478046,2026-10-01
+CBJ,Columbus Blue Jackets,73,Jet Greaves,Goalie,8482982,2026-10-01
+CBJ,Columbus Blue Jackets,83,Conor Garland,Right wing,8478856,2026-10-01
+CBJ,Columbus Blue Jackets,89,Matthew Knies,Left wing,8482720,2026-10-01
+CBJ,Columbus Blue Jackets,91,Kent Johnson,Center,8482660,2026-10-01
+CBJ,Columbus Blue Jackets,93,Luca Del Bel Belluz,Center,8483432,2026-10-01
+CBJ,Columbus Blue Jackets,94,Ryan Lomberg,Left wing,8479066,2026-10-01
+CGY,Calgary Flames,1,Devin Cooley,Goalie,8482445,2026-10-01
+CGY,Calgary Flames,7,Kevin Bahl,Defense,8480860,2026-10-01
+CGY,Calgary Flames,10,Jonathan Huberdeau,Left wing,8476456,2026-10-01
+CGY,Calgary Flames,11,Mikael Backlund,Center,8474150,2026-10-01
+CGY,Calgary Flames,16,Morgan Frost,Center,8480028,2026-10-01
+CGY,Calgary Flames,17,Yegor Sharangovich,Center,8481068,2026-10-01
+CGY,Calgary Flames,19,Zayne Parekh,Defense,8484768,2026-10-01
+CGY,Calgary Flames,22,Ryan Strome,Center,8476458,2026-10-01
+CGY,Calgary Flames,27,Matt Coronato,Right wing,8482679,2026-10-01
+CGY,Calgary Flames,28,Zach Whitecloud,Defense,8480727,2026-10-01
+CGY,Calgary Flames,29,Samuel Honzek,Left wing,8484180,2026-10-01
+CGY,Calgary Flames,32,Dustin Wolf,Goalie,8481692,2026-10-01
+CGY,Calgary Flames,37,Yan Kuznetsov,Defense,8482165,2026-10-01
+CGY,Calgary Flames,43,Adam Klapka,Right wing,8483609,2026-10-01
+CGY,Calgary Flames,44,Joel Hanley,Defense,8477810,2026-10-01
+CGY,Calgary Flames,47,Connor Zary,Center,8482074,2026-10-01
+CGY,Calgary Flames,55,Jake Middleton,Defense,8478136,2026-10-01
+CGY,Calgary Flames,71,Simon Nemec,Defense,8483495,2026-10-01
+CGY,Calgary Flames,72,Maxim Tsyplakov,Right wing,8484958,2026-10-01
+CGY,Calgary Flames,76,Martin Pospisil,Center,8481028,2026-10-01
+CGY,Calgary Flames,78,Brennan Othmann,Left wing,8482747,2026-10-01
+CGY,Calgary Flames,86,Joel Farabee,Left wing,8480797,2026-10-01
+CGY,Calgary Flames,92,Matvei Gridin,Right wing,8484860,2026-10-01
+CGY,Calgary Flames,94,Brayden Pachal,Defense,8481167,2026-10-01
+CHI,Chicago Blackhawks,6,Sam Rinzel,Defense,8483506,2026-10-01
+CHI,Chicago Blackhawks,8,Ryan Donato,Center,8477987,2026-10-01
+CHI,Chicago Blackhawks,11,Oliver Moore,Center,8484197,2026-10-01
+CHI,Chicago Blackhawks,12,Jordan Greenway,Left wing,8478413,2026-10-01
+CHI,Chicago Blackhawks,14,Kevin Korchinski,Defense,8483466,2026-10-01
+CHI,Chicago Blackhawks,16,Anton Frondell,Center,8485391,2026-10-01
+CHI,Chicago Blackhawks,20,Ryan Greene,Center,8483450,2026-10-01
+CHI,Chicago Blackhawks,22,Cole Smith,Right wing,8482062,2026-10-01
+CHI,Chicago Blackhawks,24,Bowen Byram,Defense,8481524,2026-10-01
+CHI,Chicago Blackhawks,26,Andrew Mangiapane,Left wing,8478233,2026-10-01
+CHI,Chicago Blackhawks,28,Ian Cole,Defense,8474013,2026-10-01
+CHI,Chicago Blackhawks,30,Spencer Knight,Goalie,8481519,2026-10-01
+CHI,Chicago Blackhawks,38,Ethan Del Mastro,Defense,8482807,2026-10-01
+CHI,Chicago Blackhawks,40,Arvid Soderblom,Goalie,8482821,2026-10-01
+CHI,Chicago Blackhawks,44,Wyatt Kaiser,Defense,8482176,2026-10-01
+CHI,Chicago Blackhawks,55,Artyom Levshunov,Defense,8484783,2026-10-01
+CHI,Chicago Blackhawks,59,Tyler Bertuzzi,Left wing,8477479,2026-10-01
+CHI,Chicago Blackhawks,72,Alex Vlasic,Defense,8481568,2026-10-01
+CHI,Chicago Blackhawks,76,Nick Lardis,Left wing,8484185,2026-10-01
+CHI,Chicago Blackhawks,80,Roman Kantserov,Right wing,8484390,2026-10-01
+CHI,Chicago Blackhawks,86,Teuvo Teravainen,Center,8476882,2026-10-01
+CHI,Chicago Blackhawks,88,Patrick Kane,Right wing,8474141,2026-10-01
+CHI,Chicago Blackhawks,91,Frank Nazar,Center,8483493,2026-10-01
+CHI,Chicago Blackhawks,98,Connor Bedard,Center,8484144,2026-10-01
+COL,Colorado Avalanche,7,Devon Toews,Defense,8478038,2026-10-01
+COL,Colorado Avalanche,8,Cale Makar,Defense,8480069,2026-10-01
+COL,Colorado Avalanche,9,Fedor Svechkov,Center,8482768,2026-10-01
+COL,Colorado Avalanche,10,Nicolas Roy,Center,8478462,2026-10-01
+COL,Colorado Avalanche,11,Brock Nelson,Center,8475754,2026-10-01
+COL,Colorado Avalanche,13,T.J. Hughes,Right wing,8486171,2026-10-01
+COL,Colorado Avalanche,17,Parker Kelly,Center,8480448,2026-10-01
+COL,Colorado Avalanche,25,Logan O'Connor,Right wing,8481186,2026-10-01
+COL,Colorado Avalanche,27,Brett Kulak,Defense,8476967,2026-10-01
+COL,Colorado Avalanche,29,Nathan MacKinnon,Center,8477492,2026-10-01
+COL,Colorado Avalanche,39,Mackenzie Blackwood,Goalie,8478406,2026-10-01
+COL,Colorado Avalanche,41,Scott Wedgewood,Goalie,8475809,2026-10-01
+COL,Colorado Avalanche,42,Josh Manson,Defense,8476312,2026-10-01
+COL,Colorado Avalanche,47,Noah Juulsen,Defense,8478454,2026-10-01
+COL,Colorado Avalanche,62,Artturi Lehkonen,Left wing,8477476,2026-10-01
+COL,Colorado Avalanche,68,Zachary L'Heureux,Left wing,8482742,2026-10-01
+COL,Colorado Avalanche,70,Sam Malinski,Defense,8484258,2026-10-01
+COL,Colorado Avalanche,71,Jaden Schwartz,Left wing,8475768,2026-10-01
+COL,Colorado Avalanche,84,Brent Burns,Defense,8470613,2026-10-01
+COL,Colorado Avalanche,88,Martin Necas,Center,8480039,2026-10-01
+COL,Colorado Avalanche,91,Nazem Kadri,Center,8475172,2026-10-01
+COL,Colorado Avalanche,92,Gabriel Landeskog,Left wing,8476455,2026-10-01
+DAL,Dallas Stars,1,Casey DeSmith,Goalie,8479193,2026-10-01
+DAL,Dallas Stars,4,Miro Heiskanen,Defense,8480036,2026-10-01
+DAL,Dallas Stars,5,Nils Lundkvist,Defense,8480878,2026-10-01
+DAL,Dallas Stars,6,Lian Bichsel,Defense,8483425,2026-10-01
+DAL,Dallas Stars,10,Oskar Bäck,Center,8480840,2026-10-01
+DAL,Dallas Stars,12,Radek Faksa,Center,8476889,2026-10-01
+DAL,Dallas Stars,14,Jamie Benn,Left wing,8473994,2026-10-01
+DAL,Dallas Stars,15,Colin Blackwell,Center,8476278,2026-10-01
+DAL,Dallas Stars,18,Sam Steel,Center,8479351,2026-10-01
+DAL,Dallas Stars,20,Kyle Capobianco,Defense,8478476,2026-10-01
+DAL,Dallas Stars,21,Jason Robertson,Left wing,8480027,2026-10-01
+DAL,Dallas Stars,22,Joel Kiviranta,Left wing,8481641,2026-10-01
+DAL,Dallas Stars,23,Esa Lindell,Defense,8476902,2026-10-01
+DAL,Dallas Stars,24,Roope Hintz,Center,8478449,2026-10-01
+DAL,Dallas Stars,25,Arttu Hyry,Right wing,8484938,2026-10-01
+DAL,Dallas Stars,28,Kyle Burroughs,Defense,8477335,2026-10-01
+DAL,Dallas Stars,29,Jake Oettinger,Goalie,8479979,2026-10-01
+DAL,Dallas Stars,49,Justin Hryckowian,Center,8484829,2026-10-01
+DAL,Dallas Stars,53,Wyatt Johnston,Center,8482740,2026-10-01
+DAL,Dallas Stars,55,Thomas Harley,Defense,8481581,2026-10-01
+DAL,Dallas Stars,57,Tyler Myers,Defense,8474574,2026-10-01
+DAL,Dallas Stars,91,Tyler Seguin,Center,8475794,2026-10-01
+DAL,Dallas Stars,95,Matt Duchene,Center,8475168,2026-10-01
+DAL,Dallas Stars,96,Mikko Rantanen,Right wing,8478420,2026-10-01
+DET,Detroit Red Wings,8,Ben Chiarot,Defense,8475279,2026-10-01
+DET,Detroit Red Wings,18,Andrew Copp,Center,8477429,2026-10-01
+DET,Detroit Red Wings,20,Albert Johansson,Defense,8481607,2026-10-01
+DET,Detroit Red Wings,22,Mason Appleton,Center,8478891,2026-10-01
+DET,Detroit Red Wings,23,Lucas Raymond,Left wing,8482078,2026-10-01
+DET,Detroit Red Wings,25,Jacob Bernard-Docker,Defense,8480879,2026-10-01
+DET,Detroit Red Wings,27,Michael Rasmussen,Center,8479992,2026-10-01
+DET,Detroit Red Wings,28,Michael Brandsegg-Nygård,Right wing,8484794,2026-10-01
+DET,Detroit Red Wings,29,Nate Danielson,Center,8484160,2026-10-01
+DET,Detroit Red Wings,33,Viktor Arvidsson,Left wing,8478042,2026-10-01
+DET,Detroit Red Wings,34,Carter Mazur,Left wing,8482802,2026-10-01
+DET,Detroit Red Wings,36,John Gibson,Goalie,8476434,2026-10-01
+DET,Detroit Red Wings,37,J.T. Compher,Left wing,8477456,2026-10-01
+DET,Detroit Red Wings,42,Anton Johansson,Defense,8483679,2026-10-01
+DET,Detroit Red Wings,44,Axel Sandin-Pellikka,Defense,8484223,2026-10-01
+DET,Detroit Red Wings,53,Moritz Seider,Defense,8481542,2026-10-01
+DET,Detroit Red Wings,54,William Wallinder,Defense,8482171,2026-10-01
+DET,Detroit Red Wings,55,Keegan Kolesar,Right wing,8478434,2026-10-01
+DET,Detroit Red Wings,58,Emmitt Finnie,Center,8484471,2026-10-01
+DET,Detroit Red Wings,71,Dylan Larkin,Center,8477946,2026-10-01
+DET,Detroit Red Wings,72,Justin Faulk,Defense,8475753,2026-10-01
+DET,Detroit Red Wings,80,Daniil Tarasov,Goalie,8480193,2026-10-01
+DET,Detroit Red Wings,92,Marco Kasper,Center,8483464,2026-10-01
+DET,Detroit Red Wings,93,Alex DeBrincat,Right wing,8479337,2026-10-01
+EDM,Edmonton Oilers,2,Evan Bouchard,Defense,8480803,2026-10-01
+EDM,Edmonton Oilers,5,Connor Murphy,Defense,8476473,2026-10-01
+EDM,Edmonton Oilers,6,Ryan Shea,Defense,8478854,2026-10-01
+EDM,Edmonton Oilers,10,Trent Frederic,Center,8479365,2026-10-01
+EDM,Edmonton Oilers,13,Mattias Janmark,Center,8477406,2026-10-01
+EDM,Edmonton Oilers,14,Mattias Ekholm,Defense,8475218,2026-10-01
+EDM,Edmonton Oilers,18,Zach Hyman,Left wing,8475786,2026-10-01
+EDM,Edmonton Oilers,21,Mathieu Joseph,Right wing,8478472,2026-10-01
+EDM,Edmonton Oilers,22,Matt Savoie,Center,8483512,2026-10-01
+EDM,Edmonton Oilers,24,Spencer Stastney,Defense,8481056,2026-10-01
+EDM,Edmonton Oilers,26,Alex Formenton,Left wing,8480029,2026-10-01
+EDM,Edmonton Oilers,27,Devon Levi,Goalie,8482221,2026-10-01
+EDM,Edmonton Oilers,29,Leon Draisaitl,Center,8477934,2026-10-01
+EDM,Edmonton Oilers,30,Frederik Andersen,Goalie,8475883,2026-10-01
+EDM,Edmonton Oilers,34,Colton Dach,Center,8482703,2026-10-01
+EDM,Edmonton Oilers,35,Tristan Jarry,Goalie,8477465,2026-10-01
+EDM,Edmonton Oilers,42,Kasperi Kapanen,Right wing,8477953,2026-10-01
+EDM,Edmonton Oilers,43,Owen Michaels,Right wing,8486161,2026-10-01
+EDM,Edmonton Oilers,46,Max Jones,Left wing,8479368,2026-10-01
+EDM,Edmonton Oilers,49,Ty Emberson,Defense,8480834,2026-10-01
+EDM,Edmonton Oilers,53,Isaac Howard,Left wing,8483455,2026-10-01
+EDM,Edmonton Oilers,75,Alec Regula,Defense,8480831,2026-10-01
+EDM,Edmonton Oilers,85,Shakir Mukhamadullin,Defense,8482166,2026-10-01
+EDM,Edmonton Oilers,92,Vasily Podkolzin,Right wing,8481617,2026-10-01
+EDM,Edmonton Oilers,93,Ryan Nugent-Hopkins,Center,8476454,2026-10-01
+EDM,Edmonton Oilers,96,Jake Walman,Defense,8478013,2026-10-01
+EDM,Edmonton Oilers,97,Connor McDavid,Center,8478402,2026-10-01
+FLA,Florida Panthers,3,Seth Jones,Defense,8477495,2026-10-01
+FLA,Florida Panthers,5,Aaron Ekblad,Defense,8477932,2026-10-01
+FLA,Florida Panthers,6,Radko Gudas,Defense,8475462,2026-10-01
+FLA,Florida Panthers,7,Dmitry Kulikov,Defense,8475179,2026-10-01
+FLA,Florida Panthers,8,Brady Tkachuk,Left wing,8480801,2026-10-01
+FLA,Florida Panthers,9,Sam Bennett,Center,8477935,2026-10-01
+FLA,Florida Panthers,12,Jonah Gadjovich,Left wing,8479981,2026-10-01
+FLA,Florida Panthers,13,Sam Reinhart,Center,8477933,2026-10-01
+FLA,Florida Panthers,14,Bokondji Imama,Left wing,8478147,2026-10-01
+FLA,Florida Panthers,15,Anton Lundell,Center,8482113,2026-10-01
+FLA,Florida Panthers,16,Aleksander Barkov,Center,8477493,2026-10-01
+FLA,Florida Panthers,19,Matthew Tkachuk,Left wing,8479314,2026-10-01
+FLA,Florida Panthers,20,Lars Eller,Center,8474189,2026-10-01
+FLA,Florida Panthers,21,Garnet Hathaway,Right wing,8477903,2026-10-01
+FLA,Florida Panthers,23,Carter Verhaeghe,Center,8477409,2026-10-01
+FLA,Florida Panthers,25,Jacob Markstrom,Goalie,8474593,2026-10-01
+FLA,Florida Panthers,26,Uvis Balinskis,Defense,8484304,2026-10-01
+FLA,Florida Panthers,27,Eetu Luostarinen,Center,8480185,2026-10-01
+FLA,Florida Panthers,40,Akira Schmid,Goalie,8481033,2026-10-01
+FLA,Florida Panthers,42,Gustav Forsling,Defense,8478055,2026-10-01
+FLA,Florida Panthers,63,Brad Marchand,Left wing,8473419,2026-10-01
+FLA,Florida Panthers,77,Niko Mikkola,Defense,8478859,2026-10-01
+FLA,Florida Panthers,95,Sandis Vilmanis,Left wing,8483771,2026-10-01
+LAK,Los Angeles Kings,2,Brian Dumoulin,Defense,8475208,2026-10-01
+LAK,Los Angeles Kings,5,Cody Ceci,Defense,8476879,2026-10-01
+LAK,Los Angeles Kings,6,Joel Edmundson,Defense,8476441,2026-10-01
+LAK,Los Angeles Kings,8,Drew Doughty,Defense,8474563,2026-10-01
+LAK,Los Angeles Kings,9,Adrian Kempe,Right wing,8477960,2026-10-01
+LAK,Los Angeles Kings,10,Artemi Panarin,Left wing,8478550,2026-10-01
+LAK,Los Angeles Kings,12,Trevor Moore,Left wing,8479675,2026-10-01
+LAK,Los Angeles Kings,14,Alex Laferriere,Right wing,8482155,2026-10-01
+LAK,Los Angeles Kings,15,Alex Turcotte,Center,8481532,2026-10-01
+LAK,Los Angeles Kings,21,Scott Laughton,Center,8476872,2026-10-01
+LAK,Los Angeles Kings,22,Kevin Fiala,Left wing,8477942,2026-10-01
+LAK,Los Angeles Kings,31,Anton Forsberg,Goalie,8476341,2026-10-01
+LAK,Los Angeles Kings,35,Darcy Kuemper,Goalie,8475311,2026-10-01
+LAK,Los Angeles Kings,36,Mats Zuccarello,Right wing,8475692,2026-10-01
+LAK,Los Angeles Kings,40,Joel Armia,Right wing,8476469,2026-10-01
+LAK,Los Angeles Kings,44,Mikey Anderson,Defense,8479998,2026-10-01
+LAK,Los Angeles Kings,47,Andre Lee,Left wing,8481732,2026-10-01
+LAK,Los Angeles Kings,55,Quinton Byfield,Right wing,8482124,2026-10-01
+LAK,Los Angeles Kings,56,Erik Haula,Left wing,8475287,2026-10-01
+LAK,Los Angeles Kings,64,Erik Gustafsson,Defense,8476979,2026-10-01
+LAK,Los Angeles Kings,79,Samuel Helenius,Center,8482726,2026-10-01
+LAK,Los Angeles Kings,90,Corey Perry,Right wing,8470621,2026-10-01
+LAK,Los Angeles Kings,92,Brandt Clarke,Defense,8482730,2026-10-01
+MIN,Minnesota Wild,3,Olli Maatta,Defense,8476874,2026-10-01
+MIN,Minnesota Wild,6,Viking Gustafsson Nyberg,Defense,8486166,2026-10-01
+MIN,Minnesota Wild,7,Brock Faber,Defense,8482122,2026-10-01
+MIN,Minnesota Wild,10,Bobby Brink,Right wing,8481553,2026-10-01
+MIN,Minnesota Wild,12,Matt Boldy,Left wing,8481557,2026-10-01
+MIN,Minnesota Wild,13,Yakov Trenin,Center,8478508,2026-10-01
+MIN,Minnesota Wild,14,Joel Eriksson Ek,Center,8478493,2026-10-01
+MIN,Minnesota Wild,17,Marcus Foligno,Left wing,8475220,2026-10-01
+MIN,Minnesota Wild,20,Blake Coleman,Left wing,8476399,2026-10-01
+MIN,Minnesota Wild,22,Danila Yurov,Right wing,8483525,2026-10-01
+MIN,Minnesota Wild,24,Zach Bogosian,Defense,8474567,2026-10-01
+MIN,Minnesota Wild,25,Jonas Brodin,Defense,8476463,2026-10-01
+MIN,Minnesota Wild,30,Jesper Wallstedt,Goalie,8482661,2026-10-01
+MIN,Minnesota Wild,31,Calvin Pickard,Goalie,8475717,2026-10-01
+MIN,Minnesota Wild,38,Ryan Hartman,Right wing,8477451,2026-10-01
+MIN,Minnesota Wild,43,Quinn Hughes,Defense,8480800,2026-10-01
+MIN,Minnesota Wild,46,Jared Spurgeon,Defense,8474716,2026-10-01
+MIN,Minnesota Wild,47,Michael McCarron,Center,8477446,2026-10-01
+MIN,Minnesota Wild,48,Daemon Hunt,Defense,8482094,2026-10-01
+MIN,Minnesota Wild,49,Maxim Shabanov,Right wing,8485702,2026-10-01
+MIN,Minnesota Wild,71,Nick Foligno,Left wing,8473422,2026-10-01
+MIN,Minnesota Wild,78,Nico Sturm,Center,8481477,2026-10-01
+MIN,Minnesota Wild,82,David Spacek,Defense,8483766,2026-10-01
+MIN,Minnesota Wild,97,Kirill Kaprizov,Left wing,8478864,2026-10-01
+MTL,Montréal Canadiens,8,Mike Matheson,Defense,8476875,2026-10-01
+MTL,Montréal Canadiens,13,Cole Caufield,Right wing,8481540,2026-10-01
+MTL,Montréal Canadiens,14,Nick Suzuki,Center,8480018,2026-10-01
+MTL,Montréal Canadiens,15,Alex Newhook,Center,8481618,2026-10-01
+MTL,Montréal Canadiens,17,Josh Anderson,Right wing,8476981,2026-10-01
+MTL,Montréal Canadiens,20,Juraj Slafkovský,Left wing,8483515,2026-10-01
+MTL,Montréal Canadiens,22,Chris Kreider,Left wing,8475184,2026-10-01
+MTL,Montréal Canadiens,24,Phillip Danault,Center,8476479,2026-10-01
+MTL,Montréal Canadiens,35,Samuel Montembeault,Goalie,8478470,2026-10-01
+MTL,Montréal Canadiens,42,Adam Engstrom,Defense,8483686,2026-10-01
+MTL,Montréal Canadiens,45,Alexandre Carrier,Defense,8478851,2026-10-01
+MTL,Montréal Canadiens,47,Jayden Struble,Defense,8481593,2026-10-01
+MTL,Montréal Canadiens,48,Lane Hutson,Defense,8483457,2026-10-01
+MTL,Montréal Canadiens,53,Noah Dobson,Defense,8480865,2026-10-01
+MTL,Montréal Canadiens,63,Florian Xhekaj,Left wing,8484403,2026-10-01
+MTL,Montréal Canadiens,71,Jake Evans,Center,8478133,2026-10-01
+MTL,Montréal Canadiens,72,Arber Xhekaj,Defense,8482964,2026-10-01
+MTL,Montréal Canadiens,75,Jakub Dobes,Goalie,8482487,2026-10-01
+MTL,Montréal Canadiens,76,Zachary Bolduc,Right wing,8482737,2026-10-01
+MTL,Montréal Canadiens,77,Kirby Dach,Center,8481523,2026-10-01
+MTL,Montréal Canadiens,85,Alexandre Texier,Left wing,8480074,2026-10-01
+MTL,Montréal Canadiens,91,Oliver Kapanen,Center,8482775,2026-10-01
+MTL,Montréal Canadiens,93,Ivan Demidov,Right wing,8484984,2026-10-01
+NJD,New Jersey Devils,1,Rémi Poirier,Goalie,8482465,2026-10-01
+NJD,New Jersey Devils,5,Brenden Dillon,Defense,8475455,2026-10-01
+NJD,New Jersey Devils,7,Dougie Hamilton,Defense,8476462,2026-10-01
+NJD,New Jersey Devils,11,Stefan Noesen,Right wing,8476474,2026-10-01
+NJD,New Jersey Devils,12,Cody Glass,Center,8479996,2026-10-01
+NJD,New Jersey Devils,13,Nico Hischier,Center,8480002,2026-10-01
+NJD,New Jersey Devils,16,Connor Brown,Right wing,8477015,2026-10-01
+NJD,New Jersey Devils,17,Evan Rodrigues,Center,8478542,2026-10-01
+NJD,New Jersey Devils,22,Brett Pesce,Defense,8477488,2026-10-01
+NJD,New Jersey Devils,28,Timo Meier,Right wing,8478414,2026-10-01
+NJD,New Jersey Devils,34,Jake Allen,Goalie,8474596,2026-10-01
+NJD,New Jersey Devils,39,Anthony Mantha,Right wing,8477511,2026-10-01
+NJD,New Jersey Devils,43,Luke Hughes,Defense,8482684,2026-10-01
+NJD,New Jersey Devils,47,Declan Chisholm,Defense,8480990,2026-10-01
+NJD,New Jersey Devils,50,Nico Daws,Goalie,8482076,2026-10-01
+NJD,New Jersey Devils,63,Jesper Bratt,Left wing,8479407,2026-10-01
+NJD,New Jersey Devils,70,Jesper Boqvist,Center,8480003,2026-10-01
+NJD,New Jersey Devils,71,Jonas Siegenthaler,Defense,8478399,2026-10-01
+NJD,New Jersey Devils,77,Luke Evangelista,Right wing,8482146,2026-10-01
+NJD,New Jersey Devils,81,Arseny Gritsyuk,Right wing,8481721,2026-10-01
+NJD,New Jersey Devils,86,Jack Hughes,Center,8481559,2026-10-01
+NJD,New Jersey Devils,91,Dawson Mercer,Center,8482110,2026-10-01
+NJD,New Jersey Devils,93,Amadeus Lombardi,Center,8483695,2026-10-01
+NSH,Nashville Predators,2,Adam Wilsby,Defense,8482482,2026-10-01
+NSH,Nashville Predators,9,Filip Forsberg,Left wing,8476887,2026-10-01
+NSH,Nashville Predators,12,Ryan Ufko,Defense,8482715,2026-10-01
+NSH,Nashville Predators,14,Alexander Kerfoot,Center,8477021,2026-10-01
+NSH,Nashville Predators,18,Jack Drury,Center,8480835,2026-10-01
+NSH,Nashville Predators,21,Nils Hoglander,Left wing,8481535,2026-10-01
+NSH,Nashville Predators,22,Mavrik Bourque,Center,8482145,2026-10-01
+NSH,Nashville Predators,29,Justus Annunen,Goalie,8481020,2026-10-01
+NSH,Nashville Predators,41,Nicolas Hague,Defense,8479980,2026-10-01
+NSH,Nashville Predators,46,Ilya Lyubushkin,Defense,8480950,2026-10-01
+NSH,Nashville Predators,47,Jack Ahcan,Defense,8482072,2026-10-01
+NSH,Nashville Predators,48,Nick Perbix,Defense,8480246,2026-10-01
+NSH,Nashville Predators,49,Reid Schaefer,Left wing,8483513,2026-10-01
+NSH,Nashville Predators,59,Roman Josi,Defense,8474600,2026-10-01
+NSH,Nashville Predators,71,Matthew Wood,Right wing,8484241,2026-10-01
+NSH,Nashville Predators,74,Juuse Saros,Goalie,8477424,2026-10-01
+NSH,Nashville Predators,76,Brady Skjei,Defense,8476869,2026-10-01
+NSH,Nashville Predators,79,Ross Colton,Center,8479525,2026-10-01
+NSH,Nashville Predators,81,Jonathan Marchessault,Center,8476539,2026-10-01
+NSH,Nashville Predators,84,Adam Edstrom,Center,8481726,2026-10-01
+NSH,Nashville Predators,85,William Trudeau,Defense,8482806,2026-10-01
+NSH,Nashville Predators,90,Ryan O'Reilly,Center,8475158,2026-10-01
+NSH,Nashville Predators,91,Steven Stamkos,Center,8474564,2026-10-01
+NYI,New York Islanders,3,Adam Pelech,Defense,8476917,2026-10-01
+NYI,New York Islanders,4,Matthew Kessel,Defense,8482516,2026-10-01
+NYI,New York Islanders,6,Ryan Pulock,Defense,8477506,2026-10-01
+NYI,New York Islanders,8,Logan Stanley,Defense,8479378,2026-10-01
+NYI,New York Islanders,10,Brayden Schenn,Center,8475170,2026-10-01
+NYI,New York Islanders,11,Anthony Duclair,Left wing,8477407,2026-10-01
+NYI,New York Islanders,14,Bo Horvat,Center,8477500,2026-10-01
+NYI,New York Islanders,21,Kyle Palmieri,Center,8475151,2026-10-01
+NYI,New York Islanders,24,Scott Mayfield,Defense,8476429,2026-10-01
+NYI,New York Islanders,28,Alexander Romanov,Defense,8481014,2026-10-01
+NYI,New York Islanders,30,Ilya Sorokin,Goalie,8478009,2026-10-01
+NYI,New York Islanders,32,Kyle MacLean,Center,8481237,2026-10-01
+NYI,New York Islanders,38,Victor Eklund,Right wing,8485388,2026-10-01
+NYI,New York Islanders,40,Semyon Varlamov,Goalie,8473575,2026-10-01
+NYI,New York Islanders,44,Jean-Gabriel Pageau,Center,8476419,2026-10-01
+NYI,New York Islanders,48,Matthew Schaefer,Defense,8485366,2026-10-01
+NYI,New York Islanders,51,Emil Heineman,Left wing,8482476,2026-10-01
+NYI,New York Islanders,53,Casey Cizikas,Center,8475231,2026-10-01
+NYI,New York Islanders,63,Matias Maccelli,Left wing,8481711,2026-10-01
+NYI,New York Islanders,64,Calum Ritchie,Center,8484221,2026-10-01
+NYI,New York Islanders,77,Tony DeAngelo,Defense,8477950,2026-10-01
+NYI,New York Islanders,81,Ondrej Palat,Left wing,8476292,2026-10-01
+NYI,New York Islanders,92,Simon Holmstrom,Right wing,8481601,2026-10-01
+NYR,New York Rangers,4,Braden Schneider,Defense,8482073,2026-10-01
+NYR,New York Rangers,5,Sean Durzi,Defense,8480434,2026-10-01
+NYR,New York Rangers,6,Vincent Iorio,Defense,8482861,2026-10-01
+NYR,New York Rangers,10,J.T. Miller,Center,8476468,2026-10-01
+NYR,New York Rangers,12,Alberts Smits,Defense,8485957,2026-10-01
+NYR,New York Rangers,13,Alexis Lafrenière,Left wing,8482109,2026-10-01
+NYR,New York Rangers,16,Pavel Dorofeyev,Right wing,8481604,2026-10-01
+NYR,New York Rangers,17,Eeli Tolvanen,Right wing,8480009,2026-10-01
+NYR,New York Rangers,23,Adam Fox,Defense,8479323,2026-10-01
+NYR,New York Rangers,24,Tye Kartye,Left wing,8481789,2026-10-01
+NYR,New York Rangers,26,Marcus Pettersson,Defense,8477969,2026-10-01
+NYR,New York Rangers,28,Oliver Bjorkstrand,Right wing,8477416,2026-10-01
+NYR,New York Rangers,29,Matthew Robertson,Defense,8481525,2026-10-01
+NYR,New York Rangers,31,Igor Shesterkin,Goalie,8478048,2026-10-01
+NYR,New York Rangers,33,Dylan Garand,Goalie,8482193,2026-10-01
+NYR,New York Rangers,38,Adam Sykora,Left wing,8483669,2026-10-01
+NYR,New York Rangers,42,Noah Laba,Center,8483690,2026-10-01
+NYR,New York Rangers,44,Vladislav Gavrikov,Defense,8478882,2026-10-01
+NYR,New York Rangers,49,Jaroslav Chmelar,Right wing,8482877,2026-10-01
+NYR,New York Rangers,50,Will Cuylle,Left wing,8482157,2026-10-01
+NYR,New York Rangers,60,Scott Morrow,Defense,8482666,2026-10-01
+NYR,New York Rangers,70,Joonas Korpisalo,Goalie,8476914,2026-10-01
+NYR,New York Rangers,73,Matt Rempe,Center,8482460,2026-10-01
+NYR,New York Rangers,90,Joseph Veleno,Center,8480813,2026-10-01
+NYR,New York Rangers,93,Mika Zibanejad,Center,8476459,2026-10-01
+NYR,New York Rangers,94,Gabe Perreault,Right wing,8484210,2026-10-01
+OTT,Ottawa Senators,5,Cameron Crotty,Defense,8480075,2026-10-01
+OTT,Ottawa Senators,10,Jordan Spence,Defense,8481606,2026-10-01
+OTT,Ottawa Senators,12,Shane Pinto,Center,8481596,2026-10-01
+OTT,Ottawa Senators,18,Tim Stützle,Center,8482116,2026-10-01
+OTT,Ottawa Senators,19,Drake Batherson,Right wing,8480208,2026-10-01
+OTT,Ottawa Senators,20,Fabian Zetterlund,Left wing,8480188,2026-10-01
+OTT,Ottawa Senators,21,Nick Cousins,Center,8476393,2026-10-01
+OTT,Ottawa Senators,22,Michael Amadio,Right wing,8478020,2026-10-01
+OTT,Ottawa Senators,24,Dylan Cozens,Center,8481528,2026-10-01
+OTT,Ottawa Senators,26,Carter Yakemchuk,Defense,8484759,2026-10-01
+OTT,Ottawa Senators,27,William Eklund,Left wing,8482667,2026-10-01
+OTT,Ottawa Senators,28,Claude Giroux,Right wing,8473512,2026-10-01
+OTT,Ottawa Senators,30,Samuel Ersson,Goalie,8481035,2026-10-01
+OTT,Ottawa Senators,33,Nikolas Matinpalo,Defense,8484321,2026-10-01
+OTT,Ottawa Senators,34,Stephen Halliday,Center,8483676,2026-10-01
+OTT,Ottawa Senators,35,Linus Ullmark,Goalie,8476999,2026-10-01
+OTT,Ottawa Senators,42,Hayden Hodgson,Right wing,8478173,2026-10-01
+OTT,Ottawa Senators,43,Tyler Kleven,Defense,8482095,2026-10-01
+OTT,Ottawa Senators,71,Ridly Greig,Center,8482092,2026-10-01
+OTT,Ottawa Senators,72,Thomas Chabot,Defense,8478469,2026-10-01
+OTT,Ottawa Senators,85,Jake Sanderson,Defense,8482105,2026-10-01
+OTT,Ottawa Senators,95,Andre Burakovsky,Left wing,8477444,2026-10-01
+PHI,Philadelphia Flyers,5,David Jiricek,Defense,8483460,2026-10-01
+PHI,Philadelphia Flyers,6,Travis Sanheim,Defense,8477948,2026-10-01
+PHI,Philadelphia Flyers,8,Cam York,Defense,8481546,2026-10-01
+PHI,Philadelphia Flyers,9,Jamie Drysdale,Defense,8482142,2026-10-01
+PHI,Philadelphia Flyers,10,Garrett Wilson,Left wing,8475253,2026-10-01
+PHI,Philadelphia Flyers,11,Travis Konecny,Right wing,8478439,2026-10-01
+PHI,Philadelphia Flyers,14,Sean Couturier,Center,8476461,2026-10-01
+PHI,Philadelphia Flyers,17,Nikita Grebenkin,Right wing,8483733,2026-10-01
+PHI,Philadelphia Flyers,20,Alex Bump,Left wing,8483731,2026-10-01
+PHI,Philadelphia Flyers,22,Christian Dvorak,Center,8477989,2026-10-01
+PHI,Philadelphia Flyers,24,Nick Seeler,Defense,8476372,2026-10-01
+PHI,Philadelphia Flyers,27,Noah Cates,Left wing,8480220,2026-10-01
+PHI,Philadelphia Flyers,39,Matvei Michkov,Right wing,8484387,2026-10-01
+PHI,Philadelphia Flyers,44,Simon Benoit,Defense,8481122,2026-10-01
+PHI,Philadelphia Flyers,46,Trevor Zegras,Center,8481533,2026-10-01
+PHI,Philadelphia Flyers,52,Noel Acciari,Center,8478569,2026-10-01
+PHI,Philadelphia Flyers,53,Joseph Woll,Goalie,8479361,2026-10-01
+PHI,Philadelphia Flyers,55,Rasmus Ristolainen,Defense,8477499,2026-10-01
+PHI,Philadelphia Flyers,71,Tyson Foerster,Right wing,8482159,2026-10-01
+PHI,Philadelphia Flyers,74,Owen Tippett,Right wing,8480015,2026-10-01
+PHI,Philadelphia Flyers,80,Dan Vladar,Goalie,8478435,2026-10-01
+PHI,Philadelphia Flyers,86,Denver Barkey,Center,8484142,2026-10-01
+PHI,Philadelphia Flyers,91,Carl Grundstrom,Right wing,8479336,2026-10-01
+PHI,Philadelphia Flyers,94,Porter Martone,Right wing,8485406,2026-10-01
+PIT,Pittsburgh Penguins,1,Sergei Murashov,Goalie,8483703,2026-10-01
+PIT,Pittsburgh Penguins,6,Kaedan Korczak,Defense,8481527,2026-10-01
+PIT,Pittsburgh Penguins,7,Ilya Solovyov,Defense,8482470,2026-10-01
+PIT,Pittsburgh Penguins,11,Filip Hallander,Center,8480842,2026-10-01
+PIT,Pittsburgh Penguins,13,David Gustafsson,Center,8481019,2026-10-01
+PIT,Pittsburgh Penguins,14,Nick Robertson,Left wing,8481582,2026-10-01
+PIT,Pittsburgh Penguins,16,Justin Brazeau,Right wing,8479638,2026-10-01
+PIT,Pittsburgh Penguins,17,Bryan Rust,Right wing,8475810,2026-10-01
+PIT,Pittsburgh Penguins,18,Tommy Novak,Center,8478438,2026-10-01
+PIT,Pittsburgh Penguins,19,Connor Dewar,Center,8480980,2026-10-01
+PIT,Pittsburgh Penguins,22,Hendrix Lapierre,Center,8482148,2026-10-01
+PIT,Pittsburgh Penguins,25,Elmer Soderblom,Left wing,8481725,2026-10-01
+PIT,Pittsburgh Penguins,37,Arturs Silovs,Goalie,8481668,2026-10-01
+PIT,Pittsburgh Penguins,41,Ville Koivunen,Right wing,8482758,2026-10-01
+PIT,Pittsburgh Penguins,46,Blake Lizotte,Center,8481481,2026-10-01
+PIT,Pittsburgh Penguins,49,Samuel Girard,Defense,8479398,2026-10-01
+PIT,Pittsburgh Penguins,57,Trevor van Riemsdyk,Defense,8477845,2026-10-01
+PIT,Pittsburgh Penguins,58,Kris Letang,Defense,8471724,2026-10-01
+PIT,Pittsburgh Penguins,59,Egor Chinakhov,Right wing,8482475,2026-10-01
+PIT,Pittsburgh Penguins,62,Andrei Kuzmenko,Left wing,8483808,2026-10-01
+PIT,Pittsburgh Penguins,65,Erik Karlsson,Defense,8474578,2026-10-01
+PIT,Pittsburgh Penguins,67,Rickard Rakell,Right wing,8476483,2026-10-01
+PIT,Pittsburgh Penguins,71,Evgeni Malkin,Center,8471215,2026-10-01
+PIT,Pittsburgh Penguins,72,Declan Carlile,Defense,8483398,2026-10-01
+PIT,Pittsburgh Penguins,81,Ben Kindel,Center,8485414,2026-10-01
+PIT,Pittsburgh Penguins,87,Sidney Crosby,Center,8471675,2026-10-01
+SEA,Seattle Kraken,6,Adam Larsson,Defense,8476457,2026-10-01
+SEA,Seattle Kraken,7,Jordan Eberle,Right wing,8474586,2026-10-01
+SEA,Seattle Kraken,8,Cale Fleury,Defense,8479985,2026-10-01
+SEA,Seattle Kraken,9,Chandler Stephenson,Center,8476905,2026-10-01
+SEA,Seattle Kraken,10,Matty Beniers,Center,8482665,2026-10-01
+SEA,Seattle Kraken,11,Mackie Samoskevich,Right wing,8482713,2026-10-01
+SEA,Seattle Kraken,19,Jared McCann,Left wing,8477955,2026-10-01
+SEA,Seattle Kraken,26,Ryan Winterton,Center,8482751,2026-10-01
+SEA,Seattle Kraken,27,Berkly Catton,Center,8484800,2026-10-01
+SEA,Seattle Kraken,28,Josh Mahura,Defense,8479372,2026-10-01
+SEA,Seattle Kraken,29,Vince Dunn,Defense,8478407,2026-10-01
+SEA,Seattle Kraken,31,Philipp Grubauer,Goalie,8475831,2026-10-01
+SEA,Seattle Kraken,35,Joey Daccord,Goalie,8478916,2026-10-01
+SEA,Seattle Kraken,41,Ryker Evans,Defense,8482858,2026-10-01
+SEA,Seattle Kraken,42,Curtis Douglas,Center,8480876,2026-10-01
+SEA,Seattle Kraken,44,Jake O'Brien,Center,8485383,2026-10-01
+SEA,Seattle Kraken,46,Ville Ottavainen,Defense,8482866,2026-10-01
+SEA,Seattle Kraken,51,Shane Wright,Center,8483524,2026-10-01
+SEA,Seattle Kraken,55,Ryan Lindgren,Defense,8479324,2026-10-01
+SEA,Seattle Kraken,59,Ben Meyers,Center,8483570,2026-10-01
+SEA,Seattle Kraken,62,Brandon Montour,Defense,8477986,2026-10-01
+SEA,Seattle Kraken,63,Jacob Melanson,Right wing,8482874,2026-10-01
+SEA,Seattle Kraken,74,Bobby McMann,Center,8482259,2026-10-01
+SEA,Seattle Kraken,84,Kaapo Kakko,Right wing,8481554,2026-10-01
+SEA,Seattle Kraken,89,Frederick Gaudreau,Center,8477919,2026-10-01
+SJS,San Jose Sharks,2,Will Smith,Center,8484227,2026-10-01
+SJS,San Jose Sharks,5,Nolan Allan,Defense,8482700,2026-10-01
+SJS,San Jose Sharks,6,Sam Dickinson,Defense,8484806,2026-10-01
+SJS,San Jose Sharks,7,Michael Kesselring,Defense,8480891,2026-10-01
+SJS,San Jose Sharks,9,Dmitry Orlov,Defense,8475200,2026-10-01
+SJS,San Jose Sharks,10,Ty Dellandrea,Center,8480848,2026-10-01
+SJS,San Jose Sharks,16,Alex Barré-Boulet,Center,8479718,2026-10-01
+SJS,San Jose Sharks,17,Brett Leason,Right wing,8481517,2026-10-01
+SJS,San Jose Sharks,21,Alexander Wennberg,Center,8477505,2026-10-01
+SJS,San Jose Sharks,23,Barclay Goodrow,Center,8476624,2026-10-01
+SJS,San Jose Sharks,25,Darnell Nurse,Defense,8477498,2026-10-01
+SJS,San Jose Sharks,27,Mason Marchment,Left wing,8478975,2026-10-01
+SJS,San Jose Sharks,30,Yaroslav Askarov,Goalie,8482137,2026-10-01
+SJS,San Jose Sharks,33,Alex Nedeljkovic,Goalie,8477968,2026-10-01
+SJS,San Jose Sharks,41,Ivar Stenberg,Left wing,8486103,2026-10-01
+SJS,San Jose Sharks,42,Luca Cagnoni,Defense,8484152,2026-10-01
+SJS,San Jose Sharks,44,Kiefer Sherwood,Left wing,8480748,2026-10-01
+SJS,San Jose Sharks,51,Collin Graf,Right wing,8484911,2026-10-01
+SJS,San Jose Sharks,63,Zack Ostapchuk,Center,8482859,2026-10-01
+SJS,San Jose Sharks,65,Jacob Trouba,Defense,8476885,2026-10-01
+SJS,San Jose Sharks,71,Macklin Celebrini,Center,8484801,2026-10-01
+SJS,San Jose Sharks,73,Tyler Toffoli,Center,8475726,2026-10-01
+SJS,San Jose Sharks,77,Michael Misa,Center,8485402,2026-10-01
+SJS,San Jose Sharks,81,Adam Gaudette,Right wing,8478874,2026-10-01
+SJS,San Jose Sharks,92,Igor Chernyshov,Left wing,8484994,2026-10-01
+STL,St. Louis Blues,4,Theo Lindstein,Defense,8484188,2026-10-01
+STL,St. Louis Blues,6,Philip Broberg,Defense,8481598,2026-10-01
+STL,St. Louis Blues,13,Alexey Toropchenko,Right wing,8480281,2026-10-01
+STL,St. Louis Blues,15,Dalibor Dvorsky,Right wing,8484164,2026-10-01
+STL,St. Louis Blues,17,Cam Fowler,Defense,8475764,2026-10-01
+STL,St. Louis Blues,18,Robert Thomas,Center,8480023,2026-10-01
+STL,St. Louis Blues,21,Jimmy Snuggerud,Right wing,8483516,2026-10-01
+STL,St. Louis Blues,22,Pius Suter,Center,8480459,2026-10-01
+STL,St. Louis Blues,23,Logan Mailloux,Defense,8482733,2026-10-01
+STL,St. Louis Blues,25,Brandon Carlo,Defense,8478443,2026-10-01
+STL,St. Louis Blues,29,Jonatan Berggren,Right wing,8481013,2026-10-01
+STL,St. Louis Blues,30,Joel Hofer,Goalie,8480981,2026-10-01
+STL,St. Louis Blues,36,Adam Jiricek,Defense,8484790,2026-10-01
+STL,St. Louis Blues,49,Ross Johnston,Left wing,8477527,2026-10-01
+STL,St. Louis Blues,50,Jordan Binnington,Goalie,8476412,2026-10-01
+STL,St. Louis Blues,52,Zach Dean,Center,8482784,2026-10-01
+STL,St. Louis Blues,55,Colton Parayko,Defense,8476892,2026-10-01
+STL,St. Louis Blues,63,Jake Neighbours,Left wing,8482089,2026-10-01
+STL,St. Louis Blues,65,Dillon Dube,Center,8479346,2026-10-01
+STL,St. Louis Blues,72,Justin Barron,Defense,8482111,2026-10-01
+STL,St. Louis Blues,75,Tyler Tucker,Defense,8481006,2026-10-01
+STL,St. Louis Blues,77,Connor McMichael,Left wing,8481580,2026-10-01
+STL,St. Louis Blues,81,Dylan Holloway,Left wing,8482077,2026-10-01
+STL,St. Louis Blues,83,Mason McTavish,Center,8482745,2026-10-01
+STL,St. Louis Blues,89,Pavel Buchnevich,Left wing,8477402,2026-10-01
+TBL,Tampa Bay Lightning,10,Jansen Harkins,Center,8478424,2026-10-01
+TBL,Tampa Bay Lightning,17,Dominic James,Center,8483752,2026-10-01
+TBL,Tampa Bay Lightning,21,Brayden Point,Center,8478010,2026-10-01
+TBL,Tampa Bay Lightning,24,Max Crozier,Defense,8481719,2026-10-01
+TBL,Tampa Bay Lightning,25,Jeffrey Viel,Left wing,8479705,2026-10-01
+TBL,Tampa Bay Lightning,27,Ryan McDonagh,Defense,8474151,2026-10-01
+TBL,Tampa Bay Lightning,28,Zemgus Girgensons,Center,8476878,2026-10-01
+TBL,Tampa Bay Lightning,29,Pontus Holmberg,Right wing,8480995,2026-10-01
+TBL,Tampa Bay Lightning,35,Dennis Hildeby,Goalie,8483710,2026-10-01
+TBL,Tampa Bay Lightning,37,Yanni Gourde,Center,8476826,2026-10-01
+TBL,Tampa Bay Lightning,38,Brandon Hagel,Left wing,8479542,2026-10-01
+TBL,Tampa Bay Lightning,49,Scott Sabourin,Right wing,8477149,2026-10-01
+TBL,Tampa Bay Lightning,51,Charle-Edouard D'Astous,Defense,8480426,2026-10-01
+TBL,Tampa Bay Lightning,59,Jake Guentzel,Center,8477404,2026-10-01
+TBL,Tampa Bay Lightning,71,Anthony Cirelli,Center,8478519,2026-10-01
+TBL,Tampa Bay Lightning,74,John Carlson,Defense,8474590,2026-10-01
+TBL,Tampa Bay Lightning,77,Victor Hedman,Defense,8475167,2026-10-01
+TBL,Tampa Bay Lightning,78,Emil Lilleberg,Defense,8482929,2026-10-01
+TBL,Tampa Bay Lightning,81,Erik Cernak,Defense,8478416,2026-10-01
+TBL,Tampa Bay Lightning,86,Nikita Kucherov,Right wing,8476453,2026-10-01
+TBL,Tampa Bay Lightning,88,Andrei Vasilevskiy,Goalie,8476883,2026-10-01
+TBL,Tampa Bay Lightning,90,J.J. Moser,Defense,8482655,2026-10-01
+TBL,Tampa Bay Lightning,93,Gage Goncalves,Center,8482201,2026-10-01
+TBL,Tampa Bay Lightning,94,Conor Geekie,Center,8483447,2026-10-01
+TBL,Tampa Bay Lightning,95,Ilya Mikheyev,Right wing,8481624,2026-10-01
+TOR,Toronto Maple Leafs,3,Nick Blankenburg,Defense,8483565,2026-10-01
+TOR,Toronto Maple Leafs,8,Chris Tanev,Defense,8475690,2026-10-01
+TOR,Toronto Maple Leafs,15,Colton Sissons,Center,8476925,2026-10-01
+TOR,Toronto Maple Leafs,19,Zack MacEwen,Right wing,8479772,2026-10-01
+TOR,Toronto Maple Leafs,20,Nick Paul,Left wing,8477426,2026-10-01
+TOR,Toronto Maple Leafs,22,Jake McCabe,Defense,8476931,2026-10-01
+TOR,Toronto Maple Leafs,24,Brandon Duhaime,Left wing,8479520,2026-10-01
+TOR,Toronto Maple Leafs,28,Troy Stecher,Defense,8479442,2026-10-01
+TOR,Toronto Maple Leafs,29,Bo Groulx,Center,8480870,2026-10-01
+TOR,Toronto Maple Leafs,34,Auston Matthews,Center,8479318,2026-10-01
+TOR,Toronto Maple Leafs,41,Anthony Stolarz,Goalie,8476932,2026-10-01
+TOR,Toronto Maple Leafs,43,Luke Haymes,Center,8485467,2026-10-01
+TOR,Toronto Maple Leafs,43,Darren Raddysh,Defense,8478178,2026-10-01
+TOR,Toronto Maple Leafs,44,Morgan Rielly,Defense,8476853,2026-10-01
+TOR,Toronto Maple Leafs,53,Easton Cowan,Right wing,8484158,2026-10-01
+TOR,Toronto Maple Leafs,72,Sergei Bobrovsky,Goalie,8475683,2026-10-01
+TOR,Toronto Maple Leafs,73,Teddy Blueger,Center,8476927,2026-10-01
+TOR,Toronto Maple Leafs,88,William Nylander,Right wing,8477939,2026-10-01
+TOR,Toronto Maple Leafs,91,John Tavares,Center,8475166,2026-10-01
+TOR,Toronto Maple Leafs,92,Gavin McKenna,Left wing,8486067,2026-10-01
+TOR,Toronto Maple Leafs,95,Oliver Ekman-Larsson,Defense,8475171,2026-10-01
+TOR,Toronto Maple Leafs,96,Jack Roslovic,Center,8478458,2026-10-01
+UTA,Utah Mammoth,6,John Marino,Defense,8478507,2026-10-01
+UTA,Utah Mammoth,8,Nick Schmaltz,Center,8477951,2026-10-01
+UTA,Utah Mammoth,9,Clayton Keller,Right wing,8479343,2026-10-01
+UTA,Utah Mammoth,10,Maveric Lamoureux,Defense,8483472,2026-10-01
+UTA,Utah Mammoth,11,Dylan Guenther,Right wing,8482699,2026-10-01
+UTA,Utah Mammoth,16,Vincent Trocheck,Center,8476389,2026-10-01
+UTA,Utah Mammoth,20,Andrew Peeke,Defense,8479369,2026-10-01
+UTA,Utah Mammoth,22,Jack McBain,Center,8480855,2026-10-01
+UTA,Utah Mammoth,26,Dmitri Simashev,Defense,8484386,2026-10-01
+UTA,Utah Mammoth,27,Barrett Hayton,Center,8480849,2026-10-01
+UTA,Utah Mammoth,33,Sebastian Cossa,Goalie,8482657,2026-10-01
+UTA,Utah Mammoth,38,Liam O'Brien,Center,8477070,2026-10-01
+UTA,Utah Mammoth,50,Daniil But,Left wing,8484388,2026-10-01
+UTA,Utah Mammoth,52,MacKenzie Weegar,Defense,8477346,2026-10-01
+UTA,Utah Mammoth,53,Michael Carcone,Left wing,8479619,2026-10-01
+UTA,Utah Mammoth,56,Kailer Yamamoto,Right wing,8479977,2026-10-01
+UTA,Utah Mammoth,57,Nick DeSimone,Defense,8480084,2026-10-01
+UTA,Utah Mammoth,67,Lawson Crouse,Left wing,8478474,2026-10-01
+UTA,Utah Mammoth,70,Karel Vejmelka,Goalie,8478872,2026-10-01
+UTA,Utah Mammoth,72,Anders Lee,Left wing,8475314,2026-10-01
+UTA,Utah Mammoth,82,Kevin Stenlund,Center,8478831,2026-10-01
+UTA,Utah Mammoth,88,Nate Schmidt,Defense,8477220,2026-10-01
+UTA,Utah Mammoth,92,Logan Cooley,Center,8483431,2026-10-01
+UTA,Utah Mammoth,98,Mikhail Sergachev,Defense,8479410,2026-10-01
+VAN,Vancouver Canucks,2,Luke Schenn,Defense,8474568,2026-10-01
+VAN,Vancouver Canucks,4,Jamie Oleksiak,Defense,8476467,2026-10-01
+VAN,Vancouver Canucks,5,Tom Willander,Defense,8484240,2026-10-01
+VAN,Vancouver Canucks,6,Brock Boeser,Right wing,8478444,2026-10-01
+VAN,Vancouver Canucks,7,Brendan Gallagher,Right wing,8475848,2026-10-01
+VAN,Vancouver Canucks,8,Zeev Buium,Defense,8484798,2026-10-01
+VAN,Vancouver Canucks,13,Arshdeep Bains,Left wing,8483395,2026-10-01
+VAN,Vancouver Canucks,17,Filip Hronek,Defense,8479425,2026-10-01
+VAN,Vancouver Canucks,18,Drew O'Connor,Left wing,8482055,2026-10-01
+VAN,Vancouver Canucks,23,Marco Rossi,Center,8482079,2026-10-01
+VAN,Vancouver Canucks,25,Elias Pettersson,Defense,8483678,2026-10-01
+VAN,Vancouver Canucks,31,Leevi Meriläinen,Goalie,8482447,2026-10-01
+VAN,Vancouver Canucks,32,Kevin Lankinen,Goalie,8480947,2026-10-01
+VAN,Vancouver Canucks,35,Thatcher Demko,Goalie,8477967,2026-10-01
+VAN,Vancouver Canucks,40,Elias Pettersson,Center,8480012,2026-10-01
+VAN,Vancouver Canucks,47,Paul Cotter,Left wing,8481032,2026-10-01
+VAN,Vancouver Canucks,54,Aatu Räty,Center,8482691,2026-10-01
+VAN,Vancouver Canucks,55,Guillaume Brisebois,Defense,8478465,2026-10-01
+VAN,Vancouver Canucks,63,Max Sasson,Center,8484136,2026-10-01
+VAN,Vancouver Canucks,74,Jake DeBrusk,Left wing,8478498,2026-10-01
+VAN,Vancouver Canucks,77,Filip Chytil,Center,8480078,2026-10-01
+VAN,Vancouver Canucks,88,Jonathan Lekkerimäki,Right wing,8483476,2026-10-01
+VAN,Vancouver Canucks,90,Victor Mancini,Defense,8483768,2026-10-01
+VAN,Vancouver Canucks,92,Liam Ohgren,Left wing,8483499,2026-10-01
+VAN,Vancouver Canucks,94,Linus Karlsson,Center,8481024,2026-10-01
+VGK,Vegas Golden Knights,3,Brayden McNabb,Defense,8475188,2026-10-01
+VGK,Vegas Golden Knights,4,Rasmus Andersson,Defense,8478397,2026-10-01
+VGK,Vegas Golden Knights,5,Jeremy Lauzon,Defense,8478468,2026-10-01
+VGK,Vegas Golden Knights,9,Jack Eichel,Center,8478403,2026-10-01
+VGK,Vegas Golden Knights,15,Noah Hanifin,Defense,8478396,2026-10-01
+VGK,Vegas Golden Knights,17,Marc Gatcomb,Center,8483553,2026-10-01
+VGK,Vegas Golden Knights,21,Brett Howden,Center,8479353,2026-10-01
+VGK,Vegas Golden Knights,24,Trevor Connelly,Left wing,8484803,2026-10-01
+VGK,Vegas Golden Knights,26,Nic Dowd,Center,8475343,2026-10-01
+VGK,Vegas Golden Knights,27,Shea Theodore,Defense,8477447,2026-10-01
+VGK,Vegas Golden Knights,29,Parker Wotherspoon,Defense,8478450,2026-10-01
+VGK,Vegas Golden Knights,33,Adin Hill,Goalie,8478499,2026-10-01
+VGK,Vegas Golden Knights,36,Raphael Lavoie,Center,8481534,2026-10-01
+VGK,Vegas Golden Knights,42,Braeden Bowman,Right wing,8483890,2026-10-01
+VGK,Vegas Golden Knights,48,Tomas Hertl,Center,8476881,2026-10-01
+VGK,Vegas Golden Knights,49,Ivan Barbashev,Left wing,8477964,2026-10-01
+VGK,Vegas Golden Knights,52,Dylan Coghlan,Defense,8479639,2026-10-01
+VGK,Vegas Golden Knights,61,Mark Stone,Right wing,8475913,2026-10-01
+VGK,Vegas Golden Knights,71,William Karlsson,Center,8476448,2026-10-01
+VGK,Vegas Golden Knights,79,Carter Hart,Goalie,8479394,2026-10-01
+VGK,Vegas Golden Knights,93,Mitch Marner,Right wing,8478483,2026-10-01
+VGK,Vegas Golden Knights,95,Victor Olofsson,Left wing,8478109,2026-10-01
+WPG,Winnipeg Jets,2,Dylan DeMelo,Defense,8476331,2026-10-01
+WPG,Winnipeg Jets,4,Neal Pionk,Defense,8480145,2026-10-01
+WPG,Winnipeg Jets,6,Jack St. Ivany,Defense,8481030,2026-10-01
+WPG,Winnipeg Jets,7,Vladislav Namestnikov,Center,8476480,2026-10-01
+WPG,Winnipeg Jets,9,Alex Iafallo,Left wing,8480113,2026-10-01
+WPG,Winnipeg Jets,13,Gabriel Vilardi,Center,8480014,2026-10-01
+WPG,Winnipeg Jets,17,Adam Lowry,Center,8476392,2026-10-01
+WPG,Winnipeg Jets,24,Haydn Fleury,Defense,8477938,2026-10-01
+WPG,Winnipeg Jets,27,Isak Rosen,Right wing,8482765,2026-10-01
+WPG,Winnipeg Jets,33,Clay Stevenson,Goalie,8483532,2026-10-01
+WPG,Winnipeg Jets,36,Morgan Barron,Center,8480289,2026-10-01
+WPG,Winnipeg Jets,37,Connor Hellebuyck,Goalie,8476945,2026-10-01
+WPG,Winnipeg Jets,38,Mario Ferraro,Defense,8479983,2026-10-01
+WPG,Winnipeg Jets,44,Josh Morrissey,Defense,8477504,2026-10-01
+WPG,Winnipeg Jets,45,Cole Koepke,Left wing,8481043,2026-10-01
+WPG,Winnipeg Jets,54,Dylan Samberg,Defense,8480049,2026-10-01
+WPG,Winnipeg Jets,55,Mark Scheifele,Center,8476460,2026-10-01
+WPG,Winnipeg Jets,61,Viggo Björck,Center,8486025,2026-10-01
+WPG,Winnipeg Jets,62,Nino Niederreiter,Right wing,8475799,2026-10-01
+WPG,Winnipeg Jets,74,Stuart Skinner,Goalie,8479973,2026-10-01
+WPG,Winnipeg Jets,77,Tyrel Bauer,Defense,8482459,2026-10-01
+WPG,Winnipeg Jets,81,Kyle Connor,Left wing,8478398,2026-10-01
+WPG,Winnipeg Jets,91,Cole Perfetti,Center,8482149,2026-10-01
+WPG,Winnipeg Jets,93,Brad Lambert,Center,8483471,2026-10-01
+WSH,Washington Capitals,3,Matt Roy,Defense,8478911,2026-10-01
+WSH,Washington Capitals,6,Jakob Chychrun,Defense,8479345,2026-10-01
+WSH,Washington Capitals,8,Alex Ovechkin,Left wing,8471214,2026-10-01
+WSH,Washington Capitals,9,Ryan Leonard,Right wing,8484186,2026-10-01
+WSH,Washington Capitals,17,Dylan Strome,Center,8478440,2026-10-01
+WSH,Washington Capitals,21,Aliaksei Protas,Left wing,8481656,2026-10-01
+WSH,Washington Capitals,22,Boone Jenner,Center,8476432,2026-10-01
+WSH,Washington Capitals,25,Jordan Kyrou,Right wing,8479385,2026-10-01
+WSH,Washington Capitals,27,Timothy Liljegren,Defense,8480043,2026-10-01
+WSH,Washington Capitals,34,Justin Sourdif,Center,8482088,2026-10-01
+WSH,Washington Capitals,42,Martin Fehérváry,Defense,8480796,2026-10-01
+WSH,Washington Capitals,43,Tom Wilson,Right wing,8476880,2026-10-01
+WSH,Washington Capitals,44,Cole Hutson,Defense,8484873,2026-10-01
+WSH,Washington Capitals,48,Logan Thompson,Goalie,8480313,2026-10-01
+WSH,Washington Capitals,52,Dylan McIlrath,Defense,8475795,2026-10-01
+WSH,Washington Capitals,53,Ethen Frank,Right wing,8483573,2026-10-01
+WSH,Washington Capitals,62,Ilya Protas,Left wing,8484999,2026-10-01
+WSH,Washington Capitals,63,Ivan Miroshnichenko,Left wing,8483491,2026-10-01
+WSH,Washington Capitals,72,Anthony Beauvillier,Right wing,8478463,2026-10-01
+WSH,Washington Capitals,73,Vincent Desharnais,Defense,8479576,2026-10-01
+WSH,Washington Capitals,79,Charlie Lindgren,Goalie,8479292,2026-10-01
+WSH,Washington Capitals,80,Pierre-Luc Dubois,Center,8479400,2026-10-01
+WSH,Washington Capitals,89,Alex Tuch,Right wing,8477949,2026-10-01

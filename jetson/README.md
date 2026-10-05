@@ -7,6 +7,8 @@ would run on the CPU).
 ## 1. One-time setup on the Jetson
 
 ```bash
+sudo nvpmodel -q                        # current power mode; switch to the highest (MAXN / MAXN SUPER)
+sudo nvpmodel -m <mode>                 #   with -m, the mode numbers are listed in /etc/nvpmodel.conf
 sudo jetson_clocks                      # run the clocks at max (resets on reboot)
 git clone https://github.com/AlexRHaigh/Hockey-Vision.git
 cd Hockey-Vision
@@ -17,10 +19,16 @@ Put the image and the outputs on the NVMe drive if the Jetson has one; the image
 
 ## 2. Copy the models and videos over (from your Mac)
 
-`CV_Models/` and `videos/` aren't in git.
+The models in `CV_Models/Models/` (see [CV_Models/README.md](../CV_Models/README.md)) and `videos/`
+aren't in git. The models are on Hugging Face
+([AlexRHaigh/Hockey-Vision](https://huggingface.co/AlexRHaigh/Hockey-Vision)), so you can instead
+download them on the Jetson with
+`hf download AlexRHaigh/Hockey-Vision --include "*.pt" --local-dir CV_Models/Models`. Or copy them
+from your Mac:
 
 ```bash
-scp -r CV_Models videos <user>@<jetson-ip>:~/Hockey-Vision/
+rsync -a CV_Models/Models <user>@<jetson-ip>:~/Hockey-Vision/CV_Models/
+rsync -a videos <user>@<jetson-ip>:~/Hockey-Vision/
 ```
 
 ## 3. Start the container
@@ -39,18 +47,30 @@ Jetson and survives the container.
 python export_engines.py
 ```
 
-This writes `CV_Models/<model>_model.engine` for each model (FP16), which `run_models.py` then
-uses automatically. It takes a while. If a build runs out of memory, add swap on the Jetson
-and retry just that model with `--models <name>`.
+This writes an engine next to each model in `CV_Models/Models/` (`new_player_model.engine`, `new_nano_puck.engine`, `new_dots.engine`, `new_rink_model.engine` and `new_nums.engine` for the player, puck, dots, rink and number models; FP16), which `run_models.py` then
+uses automatically. It takes a while. The engines take 384x640 input (16:9 video at 640 wide), not
+640x640, which saves the ~40% of the work a square engine spends on padding; for video of another
+shape pass `--imgsz <height> <width>`. Engines built before this was the default are square:
+rebuild them with `python export_engines.py --force`.
+
+Jersey numbers are read by the YOLO number model (`CV_Models/Models/new_nums.pt`), whose engine is built
+with the others. If a build runs out of memory, add swap on the Jetson and retry just that model with
+`--models <name>`.
 
 ## 5. Run a clip
 
 ```bash
 jetson/run_clip.sh videos/<clip>.mp4                    # whole video
 jetson/run_clip.sh videos/<clip>.mp4 --max-frames 1800  # first 1800 frames only
+jetson/run_clip.sh videos/<clip>.mp4 --teams SJS MTL    # team_a, team_b: numbers from their rosters, players named
 ```
 
-This skips all annotated videos and writes, in `outputs/<clip>/`:
+`--teams` reads the rosters from `rosters/nhl_active_players.csv` (make it with
+`python fetch_roster.py`, which needs internet; copy it over if the Jetson is offline), or from a
+past game's file with `--roster rosters/<date>_<away>_at_<home>.csv` (`python fetch_roster.py --game <id>`).
+
+This skips all annotated videos and reads jersey numbers with the YOLO number model (a player
+whose number is settled is re-read every 5th frame). It writes, in `outputs/<clip>/`:
 
 | File | Contents |
 |---|---|
