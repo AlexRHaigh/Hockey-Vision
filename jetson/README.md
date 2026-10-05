@@ -20,8 +20,11 @@ Put the image and the outputs on the NVMe drive if the Jetson has one; the image
 ## 2. Copy the models and videos over (from your Mac)
 
 The models in `CV_Models/Models/` (see [CV_Models/README.md](../CV_Models/README.md)) and `videos/`
-aren't in git. `CV_Models/unused_models/` (~3.7 GB of models the pipeline no longer uses) is left
-behind:
+aren't in git. The models are on Hugging Face
+([AlexRHaigh/Hockey-Vision](https://huggingface.co/AlexRHaigh/Hockey-Vision)), so you can instead
+download them on the Jetson with
+`hf download AlexRHaigh/Hockey-Vision --include "*.pt" --local-dir CV_Models/Models`. Or copy them
+from your Mac:
 
 ```bash
 rsync -a CV_Models/Models <user>@<jetson-ip>:~/Hockey-Vision/CV_Models/
@@ -44,16 +47,14 @@ Jetson and survives the container.
 python export_engines.py
 ```
 
-This writes `CV_Models/Models/<model>_model.engine` for each model (`new_player_model.engine`, `new_nano_puck.engine`, `new_dots.engine`, `new_rink_model.engine` and `new_nums.engine` for the player, puck, dots, rink and number models; FP16), which `run_models.py` then
+This writes an engine next to each model in `CV_Models/Models/` (`new_player_model.engine`, `new_nano_puck.engine`, `new_dots.engine`, `new_rink_model.engine` and `new_nums.engine` for the player, puck, dots, rink and number models; FP16), which `run_models.py` then
 uses automatically. It takes a while. The engines take 384x640 input (16:9 video at 640 wide), not
 640x640, which saves the ~40% of the work a square engine spends on padding; for video of another
 shape pass `--imgsz <height> <width>`. Engines built before this was the default are square:
 rebuild them with `python export_engines.py --force`.
 
 Jersey numbers are read by the YOLO number model (`CV_Models/Models/new_nums.pt`), whose engine is built
-with the others. The older readers' models (`CV_Models/unused_models/jersey_Num Models/`) are only
-needed for `--number-reader parseq`, `pipeline`, `resnet` or `temporal`, so they don't need copying
-to the Jetson. If a build runs out of memory, add swap on the Jetson and retry just that model with
+with the others. If a build runs out of memory, add swap on the Jetson and retry just that model with
 `--models <name>`.
 
 ## 5. Run a clip
@@ -68,8 +69,8 @@ jetson/run_clip.sh videos/<clip>.mp4 --teams SJS MTL    # team_a, team_b: number
 `python fetch_roster.py`, which needs internet; copy it over if the Jetson is offline), or from a
 past game's file with `--roster rosters/<date>_<away>_at_<home>.csv` (`python fetch_roster.py --game <id>`).
 
-This skips all annotated videos and reads every player's jersey number with PARSeq on every
-frame. It writes, in `outputs/<clip>/`:
+This skips all annotated videos and reads jersey numbers with the YOLO number model (a player
+whose number is settled is re-read every 5th frame). It writes, in `outputs/<clip>/`:
 
 | File | Contents |
 |---|---|

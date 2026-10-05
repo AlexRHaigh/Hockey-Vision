@@ -1,7 +1,14 @@
 # CV_Models
 
 `run_models.py` needs the five YOLO models below to run the pipeline. They are not in git
-(`CV_Models/Models/` is in `.gitignore`), so copy them into `CV_Models/Models/` before running:
+(`CV_Models/Models/` is in `.gitignore`); they are stored in the Hugging Face repo
+[AlexRHaigh/Hockey-Vision](https://huggingface.co/AlexRHaigh/Hockey-Vision). Download them into
+`CV_Models/Models/` before running, from the repo root:
+
+```bash
+pip install -U huggingface_hub
+hf download AlexRHaigh/Hockey-Vision --include "*.pt" --local-dir CV_Models/Models
+```
 
 ```
 CV_Models/
@@ -26,9 +33,3 @@ The file names are set in `MODEL_FILES` in `run_models.py`, and the folder in `M
 On the Jetson, `python export_engines.py` builds a TensorRT engine next to each model
 (`CV_Models/Models/<name>.engine`), and `run_models.py` uses the engine in place of the `.pt`
 from then on. See [jetson/README.md](../jetson/README.md).
-
-## Older jersey number readers
-
-`--number-reader parseq`, `pipeline`, `resnet` and `temporal` use models in
-`CV_Models/unused_models/jersey_Num Models/` (`JERSEY_DIR` in `run_models.py`). The default reader
-(`yolo`, `new_nums.pt`) doesn't need them.

@@ -11,22 +11,16 @@ For every input this writes to <output>/<input name>/:
     detections.json       every detection (per frame for videos)
 With --no-video only detections.json is written.
 
-Each model is loaded from CV_Models/Models/<model>_model.engine when that exists (a TensorRT engine
-built by export_engines.py, for the Jetson), otherwise from CV_Models/Models/<model>_model.pt; the player,
-puck, dots, rink and number models are CV_Models/Models/new_player_model, new_nano_puck, new_dots,
-new_rink_model and new_nums (.engine / .pt) instead (MODEL_FILES). The older jersey number readers'
-models are in CV_Models/unused_models/jersey_Num Models/ (JERSEY_DIR). An engine
-runs at the input size it was built for; --imgsz only applies to .pt weights, which run in FP16
+The player, puck, dots, rink and number models are CV_Models/Models/new_player_model,
+new_nano_puck, new_dots, new_rink_model and new_nums (MODEL_FILES), each loaded from its .engine
+when that exists (a TensorRT engine built by export_engines.py, for the Jetson), otherwise from its
+.pt (see CV_Models/README.md). An engine runs at the input size it was built for; --imgsz only applies to .pt weights, which run in FP16
 on a CUDA GPU.
 
 Jersey numbers are read by the YOLO number model (new_nums.pt): it detects single digits on each
 player's box (upscaled) and joins them into the number. With --teams (team_a's and team_b's abbreviations, e.g. SJS MTL) a player's number can only
 be one their team wears (roster.py, from a fetch_roster.py CSV, --roster), referees get none, and
-the outputs name each numbered player. Older readers, kept for comparison (their models are in
-JERSEY_DIR): --number-reader parseq (PARSeq, the text recognizer from Koshkina & Elder's jersey
-pipeline, parseq_jersey.py), pipeline (their whole pipeline with a ReID filter and a ViTPose crop,
-jersey_pipeline.py; ~10x the cost), resnet (jersey_net.py, colab/train_jersey.py) and temporal
-(temporal_jersey.py). In videos players are tracked across frames, and each track's
+the outputs name each numbered player. In videos players are tracked across frames, and each track's
 number is a vote over every frame's reading, so it stays with the player through frames where it
 can't be read and one-off misreads are outvoted.
 Reading numbers is most of the GPU work per frame, so a player whose number is already settled is
@@ -45,19 +39,10 @@ import torch
 from ultralytics import YOLO
 from ultralytics.cfg import DEFAULT_CFG_DICT
 
-from jersey_net import JerseyReader, checkpoint_path, torso_box, torso_crop
-from jersey_pipeline import PipelineReader
-from parseq_jersey import ParseqReader, find_legibility_model
 from roster import DEFAULT_ROSTER, Roster
-from temporal_jersey import TemporalJerseyReader
 from video_io import FrameReader
 
 MODELS_DIR = Path(__file__).parent / "CV_Models" / "Models"
-# The older jersey number readers' models (--number-reader parseq / pipeline / resnet / temporal):
-# PARSeq and its legibility classifier, the jersey ResNet, the temporal reader, the pipeline
-# reader's Centroid-ReID and ViTPose-H, and the old YOLO digit model.
-JERSEY_DIR = Path(__file__).parent / "CV_Models" / "unused_models" / "jersey_Num Models"
-JERSEY_MODELS = {"jersey"}
 MODEL_NAMES = ["player", "puck", "number", "rink", "dots"]
 
 # BGR colour per model for the combined output, so each model's boxes are distinguishable.
@@ -69,7 +54,7 @@ MODEL_COLORS = {
     "dots": (240, 50, 230),
 }
 
-# Weights file stems (in CV_Models/Models/, before .pt / .engine) that aren't <model>_model.
+# Weights file stems (in CV_Models/Models/, before .pt / .engine).
 MODEL_FILES = {
     "player": "new_player_model",
     "puck": "new_nano_puck",
@@ -111,7 +96,6 @@ DIGIT_NMS_IOU = 0.5         # overlapping digit boxes of different classes: keep
 DIGIT_Y_RANGE = (0.1, 0.62)
 DIGIT_HEIGHT_RANGE = (0.06, 0.3)
 MIN_READING_CONF = 0.4      # weaker readings don't vote
-TORSO_OVERLAP = 0.3         # jersey ResNet: skip a player when another player's box covers this much of their torso
 MIN_JERSEY_VOTES = 1.2      # summed confidence a track's number needs before it is shown
 PARTIAL_READ_WEIGHT = 0.5   # a one-digit read of a two-digit number (e.g. "2" of "12") counts this much
 SWITCH_RATIO = 1.5          # a track's shown number only changes when another scores this much higher
@@ -136,20 +120,15 @@ def pick_device(requested):
 
 def weights_stem(name):
     """The model's weights file name in CV_Models/Models/, without the .pt / .engine suffix."""
-    return MODEL_FILES.get(name, f"{name}_model")
-
-
-def model_dir(name):
-    """The folder the model's weights and engine are in."""
-    return JERSEY_DIR if name in JERSEY_MODELS else MODELS_DIR
+    return MODEL_FILES[name]
 
 
 def model_path(name):
     """The model's TensorRT engine if one has been exported, otherwise its .pt weights."""
-    engine = model_dir(name) / f"{weights_stem(name)}.engine"
+    engine = MODELS_DIR / f"{weights_stem(name)}.engine"
     if engine.exists():
         return engine
-    return checkpoint_path(JERSEY_DIR) if name == "jersey" else model_dir(name) / f"{weights_stem(name)}.pt"
+    return MODELS_DIR / f"{weights_stem(name)}.pt"
 
 
 def fp16_kwargs(device):
@@ -180,41 +159,12 @@ def load_model(name):
     return YOLO(str(path), task="detect")
 
 
-def load_models(names, number_reader="yolo", device=None):
-    """{name: model}. With number_reader "resnet", "number" is a JerseyReader instead of the YOLO
-    digit model."""
+def load_models(names):
+    """{name: model}"""
     models = {}
     for name in names:
-        if name == "number" and number_reader == "pipeline":
-            needed = [JERSEY_DIR / n for n in ("centroid-reid.ckpt", "vitpose-h.pth", "jersey.ckpt")]
-            for path in needed:
-                if not path.exists():
-                    sys.exit(f"Model not found: {path}")
-            print(f"  {name}: " + " + ".join(p.name for p in needed))
-            models[name] = PipelineReader(JERSEY_DIR, device)
-        elif name == "number" and number_reader == "parseq":
-            path = JERSEY_DIR / "jersey.ckpt"
-            if not path.exists():
-                sys.exit(f"Model not found: {path}")
-            print(f"  {name}: {path.name}")
-            legibility = find_legibility_model(JERSEY_DIR)
-            print(f"  legibility: {legibility.name if legibility else 'none (every player is read)'}")
-            models[name] = ParseqReader(path, device, legibility)
-        elif name == "number" and number_reader == "temporal":
-            path = JERSEY_DIR / "jersey_model.pth"
-            if not path.exists():
-                sys.exit(f"Model not found: {path}")
-            print(f"  {name}: {path.name}")
-            models[name] = TemporalJerseyReader(path, device)
-        elif name == "number" and number_reader == "resnet":
-            path = model_path("jersey")
-            if not path.exists():
-                sys.exit(f"Model not found: {path} (train it with colab/train_jersey.py)")
-            print(f"  {name}: {path.name}")
-            models[name] = JerseyReader(path, device)
-        else:
-            print(f"  {name}: {model_path(name).name}")
-            models[name] = load_model(name)
+        print(f"  {name}: {model_path(name).name}")
+        models[name] = load_model(name)
     return models
 
 
@@ -288,21 +238,17 @@ def assemble_number(digits):
     return number, sum(d["confidence"] for d in group) / len(group)
 
 
-def read_jerseys(number_model, frame, player_result, args, only=None, keys=None):
+def read_jerseys(number_model, frame, player_result, args, only=None):
     """Read each player's number this frame. Returns one dict per player box, in box order:
     {"digits": digit detections in frame coordinates, "reading": (number, conf) or None,
     "number": the number to show, filled in by the caller}. With `only` (a set of box indices),
-    the other players aren't read and get no digits or reading. `keys` are the players' track keys
-    (only the temporal reader uses them). With args.roster (--teams), a reading can only be a
-    number the player's team wears: PARSeq picks the likeliest of those, the other readers' readings
-    of anything else are dropped."""
+    the other players aren't read and get no digits or reading. With args.roster (--teams), a
+    reading can only be a number the player's team wears; readings of anything else are dropped."""
     roster = getattr(args, "roster", None)
     allowed = None
     if roster is not None:
         allowed = [roster.allowed(player_result.names[int(c)]) for c in player_result.boxes.cls.tolist()]
-    if isinstance(number_model, (JerseyReader, ParseqReader)):
-        return read_jerseys_resnet(number_model, frame, player_result, only, allowed)
-    jerseys = _read_jerseys(number_model, frame, player_result, args, only, keys)
+    jerseys = _read_jerseys(number_model, frame, player_result, args, only)
     if allowed is not None:
         for j, ok in zip(jerseys, allowed):
             if j["reading"] is not None and ok is not None and j["reading"][0] not in ok:
@@ -310,12 +256,8 @@ def read_jerseys(number_model, frame, player_result, args, only=None, keys=None)
     return jerseys
 
 
-def _read_jerseys(number_model, frame, player_result, args, only=None, keys=None):
-    """read_jerseys() without the roster: the reader's own readings."""
-    if isinstance(number_model, PipelineReader):
-        return read_jerseys_pipeline(number_model, frame, player_result, keys, only)
-    if isinstance(number_model, TemporalJerseyReader):
-        return read_jerseys_temporal(number_model, frame, player_result, keys, only)
+def _read_jerseys(number_model, frame, player_result, args, only=None):
+    """read_jerseys() without the roster: the digit model's readings."""
     jerseys = [{"digits": [], "reading": None, "number": None} for _ in range(len(player_result.boxes))]
     crops, offsets = [], []
     h, w = frame.shape[:2]
@@ -352,78 +294,6 @@ def _read_jerseys(number_model, frame, player_result, args, only=None, keys=None
                 "box_xyxy": [round(v + o, 1) for v, o in zip(box, (ox, oy, ox, oy))],
             })
         jerseys[i]["reading"] = assemble_number(jerseys[i]["digits"])
-    return jerseys
-
-
-def torso_covered(i, players):
-    """True when another player's box covers much of player i's torso, so a number read there could be theirs."""
-    tx1, ty1, tx2, ty2 = torso_box(players[i])
-    area = max(1e-6, (tx2 - tx1) * (ty2 - ty1))
-    return any(max(0, min(tx2, b[2]) - max(tx1, b[0])) * max(0, min(ty2, b[3]) - max(ty1, b[1])) / area
-               > TORSO_OVERLAP for k, b in enumerate(players) if k != i)
-
-
-def read_jerseys_pipeline(reader, frame, player_result, keys=None, only=None):
-    """read_jerseys() with Koshkina & Elder's pipeline (jersey_pipeline.py): every player's crop is
-    checked against their track by ReID, cropped by pose and read by PARSeq."""
-    jerseys = [{"digits": [], "reading": None, "number": None} for _ in range(len(player_result.boxes))]
-    players = player_result.boxes.xyxy.tolist()
-    keys = keys or [None] * len(players)
-    read = [i for i, box in enumerate(players) if (only is None or i in only)
-            and box[3] - box[1] >= MIN_NUMBER_CROP_PX and not torso_covered(i, players)]
-    for i, reading in zip(read, reader.read(frame, [players[i] for i in read], [keys[i] for i in read])):
-        jerseys[i]["reading"] = reading
-    return jerseys
-
-
-def read_jerseys_temporal(reader, frame, player_result, keys=None, only=None):
-    """read_jerseys() with the temporal (EfficientNet + LSTM) model: each player's whole-box crop
-    joins their track's sequence, and the sequence is read. Called once per frame, even with no
-    players, so the reader keeps count of frames."""
-    jerseys = [{"digits": [], "reading": None, "number": None} for _ in range(len(player_result.boxes))]
-    players = player_result.boxes.xyxy.tolist()
-    keys = keys or [None] * len(players)
-    h, w = frame.shape[:2]
-    crops, read = [], []
-    for i, box in enumerate(players):
-        if (only is not None and i not in only) or box[3] - box[1] < MIN_NUMBER_CROP_PX or torso_covered(i, players):
-            continue
-        x1, y1, x2, y2 = max(0, int(box[0])), max(0, int(box[1])), min(w, int(box[2])), min(h, int(box[3]))
-        if x2 - x1 >= 8 and y2 - y1 >= 8:
-            crops.append(frame[y1:y2, x1:x2])
-            read.append(i)
-    for i, reading in zip(read, reader.read(crops, [keys[i] for i in read])):
-        if reading is not None and not reading[0].startswith("0"):
-            jerseys[i]["reading"] = reading
-    return jerseys
-
-
-def read_jerseys_resnet(reader, frame, player_result, only=None, allowed=None):
-    """read_jerseys() with the jersey ResNet (or PARSeq): one whole-number reading per player's
-    torso crop, and no digit boxes. A reader with its own crop() (PARSeq) cuts the crop itself."""
-    jerseys = [{"digits": [], "reading": None, "number": None} for _ in range(len(player_result.boxes))]
-    players = player_result.boxes.xyxy.tolist()
-    if hasattr(reader, "read_boxes"):   # PARSeq: legibility check on the whole player, then its own crop
-        read = [i for i, box in enumerate(players) if (only is None or i in only)
-                and box[3] - box[1] >= MIN_NUMBER_CROP_PX and not torso_covered(i, players)]
-        sub = None if allowed is None else [allowed[i] for i in read]
-        for i, (number, conf) in zip(read, reader.read_boxes(frame, [players[i] for i in read], sub)):
-            if number is not None and not number.startswith("0"):
-                jerseys[i]["reading"] = (number, conf)
-        return jerseys
-    crops, read = [], []
-    for i, box in enumerate(players):
-        if (only is not None and i not in only) or box[3] - box[1] < MIN_NUMBER_CROP_PX:
-            continue
-        if torso_covered(i, players):
-            continue
-        crop = reader.crop(frame, box) if hasattr(reader, "crop") else torso_crop(frame, box)
-        if crop.shape[0] >= 8 and crop.shape[1] >= 8:
-            crops.append(crop)
-            read.append(i)
-    for i, (number, conf) in zip(read, reader.read(crops) if crops else []):
-        if number is not None and not number.startswith("0"):
-            jerseys[i]["reading"] = (number, conf)
     return jerseys
 
 
@@ -623,10 +493,7 @@ def process_video(path, models, args, out_dir):
     if "player" in models:
         # A fresh player model per video, so track ids (and the tracker's state) start over.
         models = dict(models, player=load_model("player"))
-    # A reader may combine a track's readings its own way (PARSeq: Koshkina & Elder's tracklet vote).
-    votes = getattr(models.get("number"), "votes", JerseyVotes)()
-    if hasattr(models.get("number"), "reset"):
-        models["number"].reset()  # the temporal reader's per-track sequences start over
+    votes = JerseyVotes()
 
     # Frames are written to detections.json as they're done (one per line) rather than held in
     # memory, which a full game would fill on the Jetson. The array is closed even if the run is
@@ -650,7 +517,7 @@ def process_video(path, models, args, out_dir):
                 if args.jersey_stride > 1:
                     only = {i for i, key in enumerate(keys) if key is None or not votes.settled(key)
                             or (idx + key[0]) % args.jersey_stride == 0}
-                jerseys = read_jerseys(models["number"], frame, r, args, only, keys)
+                jerseys = read_jerseys(models["number"], frame, r, args, only)
                 for key, j in zip(keys, jerseys):
                     votes.add(key, j["reading"])
                 for key, j in zip(keys, jerseys):
@@ -699,10 +566,6 @@ def main():
     parser.add_argument("--no-video", dest="write_video", action="store_false",
                         help="Only write detections.json, no annotated images/videos (faster)")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop videos after N frames (0 = all)")
-    parser.add_argument("--number-reader", choices=["yolo", "parseq", "pipeline", "resnet", "temporal"], default="yolo",
-                        help="How jersey numbers are read (default: yolo, the new_nums.pt digit detector); "
-                             "parseq, pipeline, resnet and temporal are older readers kept for comparison, "
-                             "with their models in CV_Models/unused_models/jersey_Num Models/")
     parser.add_argument("--teams", nargs=2, metavar=("TEAM_A", "TEAM_B"),
                         help="Abbreviations of the teams the player model calls team_a and team_b (e.g. SJS MTL): "
                              "jersey numbers are then limited to their rosters and players are named")
@@ -734,7 +597,7 @@ def main():
         sys.exit(f"No images or videos found in {args.source}")
 
     print(f"Loading models: {', '.join(args.models)} (device: {args.device})")
-    models = load_models(args.models, args.number_reader, args.device)
+    models = load_models(args.models)
     args.model_imgsz = {name: engine_imgsz(model_path(name)) or args.imgsz for name in args.models}
 
     for path in inputs:
