@@ -12,7 +12,7 @@ several clips can be exported together:
                    image box, and rink x, y in feet (empty when the frame had no usable fit)
     puck.csv       one row per frame with a puck detection: image box and rink x, y
     frames.csv     one row per frame: whether the rink fit worked, counts of what was seen
-    tracks.csv     one row per player track: team, jersey number, when it was seen, distance skated
+    tracks.csv     one row per player track/class: team, jersey number, when it was seen, distance skated
     metadata.json  source files, frame rate, coordinate system and a description of every column
 
 Only the standard library is used, so this runs anywhere the output folders are copied to.
@@ -90,8 +90,8 @@ COLUMNS = {
     },
     "tracks.csv": {
         "clip": "clip name",
-        "track_id": "player tracker id",
-        "class": "most frequent player model class over the track",
+        "track_id": "player tracker id; combine with clip and class to identify a summary row",
+        "class": "player model class for this track summary; class changes are summarised separately",
         "team": "A or B (empty for referees)",
         "role": "skater, goalie or referee",
         "jersey_number": "most frequently shown jersey number (empty if never read)",
@@ -257,10 +257,10 @@ def summarise_tracks(clip, players):
     by_track = defaultdict(list)
     for r in players:
         if r["track_id"] is not None:
-            by_track[r["track_id"]].append(r)
+            by_track[(r["track_id"], r["class"])].append(r)
     out = []
-    for tid in sorted(by_track):
-        rows = sorted(by_track[tid], key=lambda r: r["frame"])
+    for tid, track_class in sorted(by_track):
+        rows = sorted(by_track[(tid, track_class)], key=lambda r: r["frame"])
         cls = Counter(r["class"] for r in rows).most_common(1)[0][0]
         team, role = PLAYER_ROLES[cls]
         numbers = Counter(r["jersey_number"] for r in rows if r["jersey_number"])
@@ -332,7 +332,8 @@ def main():
         "notes": {
             "distance": f"positions smoothed with a {SMOOTH_WINDOW}-frame centred moving average; no distance "
                         f"across gaps over {MAX_GAP_FRAMES} frames; steps over {MAX_SPEED_FT_S} ft/s dropped",
-            "track_id": "unique within a clip only; the tracker can hand an id to another player in a scrum",
+            "track_id": "unique within a clip only; tracks.csv groups by (track_id, class), matching "
+                        "jersey voting. Same-class ID handovers can still mix players in a scrum",
         },
         "tables": COLUMNS,
     }
