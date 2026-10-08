@@ -9,20 +9,21 @@ Pipeline per frame:
 Run on an existing run_models.py output:
     python homography.py outputs/<clip>/detections.json videos/<clip>.mp4
 This writes, next to the detections file:
-    side_by_side.mp4  the original video, unannotated, with the top-down rink view beside it
-    positions.json    per frame: the homography, keypoints used, and player / puck rink positions
+    positions.json    per frame: the homography, camera view and cuts, keypoints used, and player /
+                      puck rink positions
     positions.csv     one row per player or puck per frame: rink x, y in feet (and track id, jersey
                       number, and player name when run_models.py was given --teams)
     homographies.csv  one row per frame: the 3x3 image -> rink homography, h00..h22 (empty if no fit)
-With --no-video the video is skipped. With --debug it also writes radar.mp4 (top-down view with
-the keypoints the fit used) and overlay.mp4 (rink keypoints reprojected onto the video, to check
-the fit).
+The video is read for its frame size and to spot camera cuts. Videos are optional outputs, for
+checking the fit by eye: --save-video writes side_by_side.mp4 (the video with the top-down rink
+view beside it), and --debug adds radar.mp4 (top-down view with the keypoints the fit used) and
+overlay.mp4 (rink keypoints reprojected onto the video).
 
 A homography row maps a video pixel (u, v) to rink feet: [x, y, w] = H @ [u, v, 1], then
 (x / w, y / w). Rink feet have the origin at the centre dot, x along the rink (-100 to 100) and
 y across it (-42.5 near boards to 42.5 far boards); see rink.py.
 
-The top-down view shows players (with their jersey numbers, when run_models.py read them) and
+In the videos, the top-down view shows players (with their jersey numbers, when run_models.py read them) and
 the puck. On frames with no usable fit, including fits rejected because they put all the
 players in a tiny patch or make them implausibly tall or short, the rink is shown empty with
 its outline in red.
@@ -66,6 +67,7 @@ MIN_PLAYERS_FOR_SPREAD = 4
 PLAYER_HEIGHT_RANGE_FT = (3.0, 9.0)
 MIN_PLAYERS_FOR_HEIGHT = 3
 LINE_END_TOL_PX = 40  # a line box corner must be this close to where the fit predicts the line ends
+CUT_CORRELATION = 0.7  # consecutive frames whose colour histograms correlate less than this are a camera cut
 
 PLAYER_CLASSES = {"team_a_player", "team_b_player", "goalie_a", "goalie_b", "referee"}
 PLAYER_COLORS = {  # BGR
@@ -283,8 +285,9 @@ def match_keypoints(detections, frame_size):
     """Assign rink keypoint names to the dot / circle / line / goal detections of one frame.
 
     `detections` is one frame's {model_name: [detection, ...]} dict as written by run_models.py,
-    `frame_size` is (width, height). Returns (matches, lines): a list of Match, and a list of
-    LineCandidate whose corners compute_homography() resolves once it has a first fit. A
+    `frame_size` is (width, height). Returns (matches, lines, view): a list of Match, a list of
+    LineCandidate whose corners compute_homography() resolves once it has a first fit, and the
+    camera view ("side" or "end", below). A
     landmark whose identity can't be worked out is left out rather than guessed, because one
     wrong match can pull the whole homography off.
 
@@ -416,7 +419,7 @@ def match_keypoints(detections, frame_size):
     for m in matches:
         if m.keypoint not in best or m.weight > best[m.keypoint].weight:
             best[m.keypoint] = m
-    return list(best.values()), lines
+    return list(best.values()), lines, view
 
 
 _CIRCLE_ANGLES = np.linspace(0, 2 * np.pi, 180, endpoint=False)
@@ -502,7 +505,7 @@ def _resolve_lines(lines, H, frame_size):
     return out
 
 
-def compute_homography(matches, lines=(), frame_size=(1920, 1080)):
+def compute_homography(matches, lines, frame_size):
     """Fit image -> rink (feet). Returns (H, inlier_matches) or (None, []).
 
     Fits the point landmarks first, then uses that fit to resolve which corners of each line
@@ -534,7 +537,7 @@ def compute_homography(matches, lines=(), frame_size=(1920, 1080)):
     return best[0], best[1]
 
 
-def _plausible(H, frame_size=(1920, 1080)):
+def _plausible(H, frame_size):
     """Reject degenerate fits (mirrored, collapsed or absurdly scaled) before they reach the radar."""
     if abs(np.linalg.det(H)) < 1e-12:
         return False
@@ -579,7 +582,7 @@ class HomographyTracker:
         grid = np.float32([[x, y] for x in (0.2 * w, 0.5 * w, 0.8 * w) for y in (0.4 * h, 0.7 * h)])
         return float(np.max(np.linalg.norm(image_to_rink(grid, self.H) - image_to_rink(grid, H_new), axis=1)))
 
-    def update(self, H_new, frame_size=(1920, 1080)):
+    def update(self, H_new, frame_size):
         if H_new is not None:
             H_new = H_new / H_new[2, 2]
             if self.H is None or self._jump_ft(H_new, frame_size) > self.max_jump_ft:
@@ -756,21 +759,21 @@ def write_csvs(positions, out_dir):
                             *p["puck"]["rink_xy"]])
     with open(out_dir / "homographies.csv", "w", newline="") as f:
         w = csv.writer(f)
-        w.writerow(["frame", "time_s", "rejected", "keypoints_used"] + [f"h{r}{c}" for r in range(3) for c in range(3)])
+        w.writerow(["frame", "time_s", "view", "rejected", "keypoints_used"] + [f"h{r}{c}" for r in range(3) for c in range(3)])
         for p in positions:
             H = sum(p["homography"], []) if p["homography"] is not None else [""] * 9
-            w.writerow([p["frame"], p["time_s"], p["rejected"] or "", " ".join(p["keypoints_used"])] + H)
+            w.writerow([p["frame"], p["time_s"], p["view"], p["rejected"] or "", " ".join(p["keypoints_used"])] + H)
 
 
 def main():
     parser = argparse.ArgumentParser(
-        description="Write the video with a top-down rink view of the players beside it.")
+        description="Map detections onto the rink (feet) with a per-frame homography.")
     parser.add_argument("detections", type=Path, help="detections.json written by run_models.py for the video")
     parser.add_argument("video", type=Path, help="The source video the detections came from")
     parser.add_argument("--output", type=Path, default=None,
-                        help="Output video (default: side_by_side.mp4 next to the detections)")
-    parser.add_argument("--no-video", dest="write_video", action="store_false",
-                        help="Only write positions.json and the CSVs, not side_by_side.mp4 (faster)")
+                        help="With --save-video, the output video (default: side_by_side.mp4 next to the detections)")
+    parser.add_argument("--save-video", action="store_true",
+                        help="Also write side_by_side.mp4, the video with the top-down rink view beside it")
     parser.add_argument("--debug", action="store_true",
                         help="Also write radar.mp4 and overlay.mp4 with the fitted keypoints drawn on")
     args = parser.parse_args()
@@ -793,7 +796,7 @@ def main():
     template_no_fit = no_fit_template(template)
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     out = None
-    if args.write_video:
+    if args.save_video:
         out = cv2.VideoWriter(str(output), fourcc, fps, (width + panel_width, height))
     radar_out = overlay_out = None
     if args.debug:
@@ -801,7 +804,7 @@ def main():
         overlay_out = cv2.VideoWriter(str(out_dir / "overlay.mp4"), fourcc, fps, frame_size)
 
     tracker = HomographyTracker()
-    positions, fitted = [], 0
+    positions = []
     rejected_counts = {"players_clustered": 0, "player_scale": 0}
     prev_hist = None
     try:
@@ -812,13 +815,13 @@ def main():
             small = cv2.resize(frame, (width // 4, height // 4), interpolation=cv2.INTER_AREA)
             hist = cv2.calcHist([cv2.cvtColor(small, cv2.COLOR_BGR2HSV)], [0, 1], None, [32, 32], [0, 180, 0, 256])
             cv2.normalize(hist, hist)
-            if prev_hist is not None and cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL) < 0.7:
-                tracker.reset()  # camera cut
+            cut = prev_hist is not None and cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL) < CUT_CORRELATION
+            if cut:
+                tracker.reset()
             prev_hist = hist
 
-            matches, lines = match_keypoints(dets, frame_size)
+            matches, lines, view = match_keypoints(dets, frame_size)
             H_frame, inliers = compute_homography(matches, lines, frame_size)
-            fitted += H_frame is not None
             H = tracker.update(H_frame, frame_size)
             players = project_players(dets, H)
             puck = project_puck(dets, H)
@@ -839,6 +842,8 @@ def main():
 
             positions.append({"frame": f["frame"], "time_s": f["time_s"],
                               "homography": None if H is None else np.round(H, 8).tolist(),
+                              "cut": bool(cut),
+                              "view": view,
                               "rejected": rejected,
                               "keypoints_used": [m.keypoint for m in inliers],
                               "players": players,
@@ -860,14 +865,14 @@ def main():
             if w is not None:
                 w.release()
 
-    (out_dir / "positions.json").write_text(json.dumps(positions, indent=2))
+    (out_dir / "positions.json").write_text(json.dumps(positions))
     write_csvs(positions, out_dir)
     shown = sum(p["homography"] is not None for p in positions)
-    print(f"Rink view shown on {shown}/{len(frames)} frames (red outline on the other {len(positions) - shown}: "
+    print(f"Rink fit on {shown}/{len(frames)} frames (of the other {len(positions) - shown}: "
           f"{rejected_counts['players_clustered']} with clustered players, "
           f"{rejected_counts['player_scale']} with implausible player size, rest too few rink markings); "
-          f"puck shown on {sum(p['puck'] is not None for p in positions)}")
-    written = ([output] if args.write_video else []) + [out_dir / n for n in
+          f"puck on the rink in {sum(p['puck'] is not None for p in positions)}")
+    written = ([output] if args.save_video else []) + [out_dir / n for n in
                                                         ("positions.json", "positions.csv", "homographies.csv")]
     if args.debug:
         written += [out_dir / "radar.mp4", out_dir / "overlay.mp4"]

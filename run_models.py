@@ -3,13 +3,14 @@
 Examples:
     python run_models.py path/to/frame.jpg
     python run_models.py path/to/game.mp4 --models player puck --conf 0.3
-    python run_models.py path/to/folder --no-per-model --output results
+    python run_models.py path/to/folder --output results --save-video
 
-For every input this writes to <output>/<input name>/:
-    combined.<ext>        all selected models drawn on one image/video
-    <model>.<ext>         one annotated output per model (unless --no-per-model)
-    detections.json       every detection (per frame for videos)
-With --no-video only detections.json is written.
+For every input this writes <output>/<input name>/detections.json: every detection (per frame for
+videos). With --width the frames are resized to that width before the models see them (to test
+lower or higher resolution; default: the video's own); detections are still written in the source
+video's pixel coordinates, so homography.py and export_data.py run on the original video as usual. Annotated outputs are optional, for checking the models by eye:
+    --save-video          also write combined.<ext>, all selected models drawn on one image/video
+    --per-model           with --save-video, also write <model>.<ext>, one annotated output per model
 
 The player, puck, dots, rink and number models are CV_Models/Models/new_player_model,
 new_nano_puck, new_dots, new_rink_model and new_nums (MODEL_FILES), each loaded from its .engine
@@ -40,7 +41,7 @@ from ultralytics import YOLO
 from ultralytics.cfg import DEFAULT_CFG_DICT
 
 from roster import DEFAULT_ROSTER, Roster
-from video_io import FrameReader
+from video_io import FrameReader, resize, resized_size
 
 MODELS_DIR = Path(__file__).parent / "CV_Models" / "Models"
 MODEL_NAMES = ["player", "puck", "number", "rink", "dots"]
@@ -118,17 +119,12 @@ def pick_device(requested):
     return "cpu"
 
 
-def weights_stem(name):
-    """The model's weights file name in CV_Models/Models/, without the .pt / .engine suffix."""
-    return MODEL_FILES[name]
-
-
 def model_path(name):
     """The model's TensorRT engine if one has been exported, otherwise its .pt weights."""
-    engine = MODELS_DIR / f"{weights_stem(name)}.engine"
+    engine = MODELS_DIR / f"{MODEL_FILES[name]}.engine"
     if engine.exists():
         return engine
-    return MODELS_DIR / f"{weights_stem(name)}.pt"
+    return MODELS_DIR / f"{MODEL_FILES[name]}.pt"
 
 
 def fp16_kwargs(device):
@@ -348,7 +344,9 @@ def track_ids(result):
     return [None] * len(result.boxes) if ids is None else [int(i) for i in ids.tolist()]
 
 
-def results_to_dicts(results, jerseys=None, roster=None):
+def results_to_dicts(results, jerseys=None, roster=None, scale=1.0):
+    """Detections as dicts. `scale` maps boxes from the (resized) frame the models saw back to the
+    source video's pixels."""
     out = {}
     for name, r in results.items():
         dets = []
@@ -358,7 +356,7 @@ def results_to_dicts(results, jerseys=None, roster=None):
             det = {
                 "class": r.names[int(cls)],
                 "confidence": round(score, 4),
-                "box_xyxy": [round(v, 1) for v in box],
+                "box_xyxy": [round(v * scale, 1) for v in box],
             }
             if name == "player":
                 if ids[i] is not None:
@@ -373,7 +371,8 @@ def results_to_dicts(results, jerseys=None, roster=None):
             dets.append(det)
         out[name] = dets
     if jerseys is not None:
-        out["number"] = [d for j in jerseys for d in j["digits"]]
+        out["number"] = [dict(d, box_xyxy=[round(v * scale, 1) for v in d["box_xyxy"]])
+                         for j in jerseys for d in j["digits"]]
     return out
 
 
@@ -454,6 +453,8 @@ def process_image(path, models, args, out_dir):
     if frame is None:
         print(f"  Could not read {path}, skipping")
         return
+    source_width = frame.shape[1]
+    frame = resize(frame, resized_size(frame.shape[1], frame.shape[0], args.width))
     results = run_on_frame(models, frame, args)
     jerseys = None
     if "number" in models:
@@ -462,13 +463,13 @@ def process_image(path, models, args, out_dir):
         for j in jerseys:
             j["number"] = j["reading"][0] if j["reading"] else None
 
-    if args.write_video:
+    if args.save_video:
         cv2.imwrite(str(out_dir / f"combined{path.suffix}"), draw_combined(frame, results, jerseys))
-    if args.write_video and args.per_model:
+    if args.save_video and args.per_model:
         for name in models:
             cv2.imwrite(str(out_dir / f"{name}{path.suffix}"), per_model_frame(name, frame, results, jerseys))
 
-    detections = results_to_dicts(results, jerseys, args.roster)
+    detections = results_to_dicts(results, jerseys, args.roster, source_width / frame.shape[1])
     (out_dir / "detections.json").write_text(json.dumps(detections, indent=2))
     counts = ", ".join(f"{n}: {len(d)}" for n, d in detections.items())
     print(f"  {counts}")
@@ -476,15 +477,16 @@ def process_image(path, models, args, out_dir):
 
 def process_video(path, models, args, out_dir):
     try:
-        video = FrameReader(path, args.max_frames)
+        video = FrameReader(path, args.max_frames, width=args.width)
     except OSError:
         print(f"  Could not open {path}, skipping")
         return
     fps, w, h, total = video.fps, video.width, video.height, video.total
+    scale = video.source_width / video.width  # detections are written in source video pixels
 
     fourcc = cv2.VideoWriter_fourcc(*"mp4v")
     writers = {}
-    if args.write_video:
+    if args.save_video:
         writers["combined"] = cv2.VideoWriter(str(out_dir / "combined.mp4"), fourcc, fps, (w, h))
         if args.per_model:
             for name in models:
@@ -530,7 +532,7 @@ def process_video(path, models, args, out_dir):
                     writers[name].write(per_model_frame(name, frame, results, jerseys))
 
             detections_file.write(("\n" if idx == 0 else ",\n") + json.dumps(
-                {"frame": idx, "time_s": round(idx / fps, 3), "detections": results_to_dicts(results, jerseys, args.roster)}))
+                {"frame": idx, "time_s": round(idx / fps, 3), "detections": results_to_dicts(results, jerseys, args.roster, scale)}))
             idx += 1
             if idx % 25 == 0 or idx == total:
                 print(f"\r  frame {idx}/{total or '?'}", end="", flush=True)
@@ -550,7 +552,7 @@ def collect_inputs(source):
 
 
 def main():
-    parser = argparse.ArgumentParser(description="Run the Hockey-Vision models and save annotated outputs.")
+    parser = argparse.ArgumentParser(description="Run the Hockey-Vision models and save their detections.")
     parser.add_argument("source", type=Path, help="Image, video, or folder of images/videos")
     parser.add_argument("--models", nargs="+", choices=MODEL_NAMES, default=MODEL_NAMES,
                         help="Which models to run (default: all)")
@@ -561,10 +563,13 @@ def main():
     parser.add_argument("--imgsz", type=int, default=640, help="Inference image size (default: 640)")
     parser.add_argument("--device", default=None, help="cpu, mps, cuda, 0... (default: auto)")
     parser.add_argument("--output", type=Path, default=Path("outputs"), help="Output folder (default: outputs)")
-    parser.add_argument("--no-per-model", dest="per_model", action="store_false",
-                        help="Only write the combined output, not one per model")
-    parser.add_argument("--no-video", dest="write_video", action="store_false",
-                        help="Only write detections.json, no annotated images/videos (faster)")
+    parser.add_argument("--save-video", action="store_true",
+                        help="Also write combined.<ext>, every model drawn on the image/video (off by default)")
+    parser.add_argument("--per-model", action="store_true",
+                        help="With --save-video, also write one annotated output per model")
+    parser.add_argument("--width", type=int, default=None,
+                        help="Resize frames to this width (aspect ratio kept) before running the models, "
+                             "e.g. 640, 960 or 1280 (default: the video's own resolution)")
     parser.add_argument("--max-frames", type=int, default=0, help="Stop videos after N frames (0 = all)")
     parser.add_argument("--teams", nargs=2, metavar=("TEAM_A", "TEAM_B"),
                         help="Abbreviations of the teams the player model calls team_a and team_b (e.g. SJS MTL): "

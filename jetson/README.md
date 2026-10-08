@@ -69,18 +69,18 @@ jetson/run_clip.sh videos/<clip>.mp4 --teams SJS MTL    # team_a, team_b: number
 `python fetch_roster.py`, which needs internet; copy it over if the Jetson is offline), or from a
 past game's file with `--roster rosters/<date>_<away>_at_<home>.csv` (`python fetch_roster.py --game <id>`).
 
-This skips all annotated videos and reads jersey numbers with the YOLO number model (a player
-whose number is settled is re-read every 5th frame). It writes, in `outputs/<clip>/`:
+This writes data only, no annotated videos, and reads jersey numbers with the YOLO number model
+(a player whose number is settled is re-read every 5th frame). It writes, in `outputs/<clip>/`:
 
 | File | Contents |
 |---|---|
-| `homographies.csv` | one row per frame: `frame, time_s, rejected, keypoints_used, h00 … h22` (empty when no fit) |
+| `homographies.csv` | one row per frame: `frame, time_s, view, rejected, keypoints_used, h00 … h22` (empty when no fit) |
 | `positions.csv` | one row per player / puck per frame: `frame, time_s, object, track_id, class, jersey_number, confidence, x_ft, y_ft` |
 | `positions.json` | the same, nested per frame |
 | `detections.json` | the raw model detections (input to `homography.py`) |
-| `export/` | analysis-ready tables from `export_data.py`, see below |
+| `export/` | tables, play events and `game_report.json` from `export_data.py`, see below |
 
-To also get `side_by_side.mp4`, run `homography.py` without `--no-video`.
+To also get `side_by_side.mp4`, run `homography.py outputs/<clip>/detections.json <video> --save-video`.
 
 ## 6. Copy the results back (from your Mac)
 
@@ -88,7 +88,7 @@ To also get `side_by_side.mp4`, run `homography.py` without `--no-video`.
 scp <user>@<jetson-ip>:~/Hockey-Vision/outputs/<clip>/{homographies.csv,positions.csv,positions.json} .
 ```
 
-or just the export tables: `scp -r <user>@<jetson-ip>:~/Hockey-Vision/outputs/<clip>/export .`
+or just the export: `scp -r <user>@<jetson-ip>:~/Hockey-Vision/outputs/<clip>/export .`
 
 ## Exported tables
 
@@ -101,8 +101,12 @@ Python standard library, so it can also be re-run on your Mac on copied output f
 |---|---|
 | `players.csv` | one row per player detection per frame: `track_id`, `team` (A/B), `role` (skater/goalie/referee), `jersey_number`, image box, and rink `x_ft, y_ft` (empty on frames without a usable fit) |
 | `puck.csv` | one row per frame with a puck: image box and rink `x_ft, y_ft` |
-| `frames.csv` | one row per frame: `rink_fit`, `rejected`, `keypoints_used`, player and puck counts |
+| `frames.csv` | one row per frame: `rink_fit`, `rejected`, `keypoints_used`, player and puck counts, `camera_cut`, `view` |
 | `tracks.csv` | one row per player track: team, role, jersey number, first/last frame, frames seen, mean position, `distance_ft`, `mean_speed_ft_s` |
+| `possessions.csv` | one row per spell of a player carrying the puck, and how it ended |
+| `events.csv` | shots, passes, turnovers and defensive plays, with times, players and rink positions |
+| `player_stats.csv` | one row per player: time detected, distance, possession, shots, passes, takeaways, defense |
+| `game_report.json` | all of it in one JSON file for a language model, with definitions and event descriptions |
 | `metadata.json` | source files, fps, the coordinate system and a description of every column |
 
 ## Using the homography

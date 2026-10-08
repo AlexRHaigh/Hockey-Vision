@@ -1,10 +1,12 @@
 # Hockey-Vision
 
-Hockey-Vision turns broadcast NHL video into player and puck tracking data. It finds every
-player, referee and the puck in each frame, reads the players' jersey numbers, works out where
-each frame's camera is looking on the rink, and maps everyone onto a top-down rink in real-world
-feet. The output is a set of per-frame and per-player tables (positions, teams, numbers, names,
-distance skated) that can be analysed like tracking data.
+Hockey-Vision turns broadcast NHL video into player and puck tracking data and play-by-play
+events. It finds every player, referee and the puck in each frame, reads the players' jersey
+numbers, works out where each frame's camera is looking on the rink, and maps everyone onto a
+top-down rink in real-world feet. From those rink positions it finds possessions, shots, passes,
+turnovers and defensive plays. The output is machine-readable data: per-frame and per-player
+tables, an event list with times, and a `game_report.json` written for a language model to read
+and turn into feedback.
 
 It runs on a Mac or a CUDA GPU, and on an NVIDIA Jetson Orin Nano with TensorRT engines (see
 [jetson/README.md](jetson/README.md)).
@@ -26,7 +28,9 @@ run_models.py ── five YOLO models per frame ──────────�
 homography.py ── rink + dots keypoints → per-frame homography → rink feet ─► positions.json/.csv
       │   matched to named landmarks in rink.py, outliers dropped, smoothed over time
       ▼
-export_data.py ── analysis tables ───────────────────────► outputs/<clip>/export/*.csv
+export_data.py ── tables + play events (events.py) ──────► outputs/<clip>/export/
+                   possessions, shots, passes, turnovers,    *.csv, game_report.json
+                   defensive plays, per-player stats
 ```
 
 1. **Detection and tracking** (`run_models.py`): the player model's boxes are tracked across
@@ -38,9 +42,9 @@ export_data.py ── analysis tables ──────────────
    to known rink landmarks, and a homography from image pixels to rink feet is fitted for each
    frame. Players are placed where their skates meet the ice. Rink coordinates are feet from the
    centre dot: x along the rink (-100 to 100), y across it (-42.5 to 42.5).
-3. **Export** (`export_data.py`): one or more clips' outputs become `players.csv`, `puck.csv`,
-   `frames.csv`, `tracks.csv` and `metadata.json` (described in
-   [jetson/README.md](jetson/README.md#exported-tables)).
+3. **Export and play events** (`export_data.py`, `events.py`): one or more clips' outputs become
+   tables, play events and per-player stats (see [Output](#output)). Events are found from the
+   rink positions alone, in the 2D rink plane.
 
 ## Models
 
@@ -61,10 +65,49 @@ hf download AlexRHaigh/Hockey-Vision --include "*.pt" --local-dir CV_Models/Mode
 
 1. `run_models.py <video>` runs the detection models and writes `outputs/<clip>/detections.json`.
 2. `homography.py outputs/<clip>/detections.json <video>` maps players and the puck onto the rink
-   (`positions.json`, `positions.csv`, `homographies.csv`, and `side_by_side.mp4`).
-3. `export_data.py outputs/<clip>` writes analysis-ready tables to `outputs/<clip>/export/`:
-   `players.csv`, `puck.csv`, `frames.csv`, `tracks.csv` and `metadata.json`
-   (see [jetson/README.md](jetson/README.md#exported-tables)).
+   (`positions.json`, `positions.csv`, `homographies.csv`).
+3. `export_data.py outputs/<clip>` writes the tables, events and `game_report.json` to
+   `outputs/<clip>/export/` (several clips: `export_data.py outputs`, written to `outputs/export/`).
+
+`run_models.py --width <px>` (e.g. 640, 960, 1280) resizes the frames before the models see them,
+to test how they do on lower-resolution video; the default is the video's own resolution.
+Detections are still written in the source video's pixels, so the later steps run unchanged.
+
+`jetson/run_clip.sh <video> [--teams SJS MTL]` runs all three. Only data is written by default.
+Annotated videos are optional outputs, for checking the models by eye:
+`run_models.py --save-video` writes `combined.mp4` (`--per-model` adds one video per model), and
+`homography.py --save-video` writes `side_by_side.mp4` with the top-down rink beside the video
+(`--debug` adds `radar.mp4` and `overlay.mp4`).
+
+## Output
+
+`outputs/<clip>/export/`:
+
+| File | Contents |
+|---|---|
+| `game_report.json` | Everything a language model needs for feedback, in one file: definitions, team totals, each player's stats, and every event with its time and a plain-English `description` |
+| `events.csv` | One row per event: `type` (`shot`, `pass`, `turnover`, `defensive_play`), `subtype`, time, who did it, who to/from, rink position, zone; type-specific fields in `details` (JSON) |
+| `player_stats.csv` | One row per player: time detected, distance skated, possessions, shots, passes (good ones too), takeaways, interceptions, turnovers, defensive plays |
+| `possessions.csv` | One row per spell of a player carrying the puck, and how it ended |
+| `players.csv`, `puck.csv`, `frames.csv`, `tracks.csv` | Per-frame positions and per-track summaries ([jetson/README.md](jetson/README.md#exported-tables)) |
+| `metadata.json` | Source files, frame rate, coordinate system and a description of every column |
+
+The events (`events.py` has the exact rules and thresholds):
+
+- **Shots**: the puck leaves a player's stick at shot speed on a line at the other team's net, or
+  the other team's goalie gets it straight after a release near the net. Outcomes: `saved`,
+  `blocked`, `possible_goal`, `rebound_recovered`, `recovered_by_opponent`, `unknown`.
+- **Passes**: the puck goes from one player to a teammate. `good` passes say why: advanced the
+  puck, beat defenders, relieved pressure, found an open teammate, or led to a shot.
+- **Turnovers**: the other team gets the puck: a `takeaway` (stolen off the carrier), an
+  `interception`, or a `goalie_recovery`.
+- **Defensive plays**: an opponent close to the carrier forces them to backtrack, slows them
+  down, or makes them pass the puck away. Credited to that defender.
+- **Time detected**: per player, every frame of every track carrying their jersey number.
+
+Which way each team attacks comes from where the goalies stand. Times are video time, not the
+game clock. The puck is only seen in part of the frames and players are only named once their
+number is read, so treat the counts as estimates.
 
 ## Repository layout
 
@@ -72,12 +115,12 @@ hf download AlexRHaigh/Hockey-Vision --include "*.pt" --local-dir CV_Models/Mode
 |---|---|
 | `run_models.py` | Runs the detection models, tracks players and reads jersey numbers |
 | `homography.py`, `rink.py` | Maps detections onto the rink; rink geometry and the template drawing |
-| `export_data.py` | Turns a clip's outputs into analysis tables |
+| `export_data.py`, `events.py` | Turns a clip's outputs into tables, play events and `game_report.json` |
 | `fetch_roster.py`, `roster.py`, `rosters/` | NHL rosters for `--teams` / `--roster` |
 | `export_engines.py`, `jetson/` | TensorRT engines and the Docker setup for the Jetson |
 | `video_io.py` | Background-thread video decoding |
 | `CV_Models/` | The models (see [CV_Models/README.md](CV_Models/README.md)) |
-| `assets/` | The rink template image |
+| `assets/` | The rink template image (for the optional videos) |
 | `tests/` | Tests |
 
 ## Jersey numbers

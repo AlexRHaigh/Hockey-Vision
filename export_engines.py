@@ -32,7 +32,7 @@ import sys
 from ultralytics import YOLO
 from ultralytics.cfg import DEFAULT_CFG_DICT
 
-from run_models import MODEL_NAMES, MODELS_DIR, NUMBER_BATCH, NUMBER_IMGSZ, weights_stem
+from run_models import MODEL_FILES, MODEL_NAMES, MODELS_DIR, NUMBER_BATCH, NUMBER_IMGSZ
 
 
 def main():
@@ -48,9 +48,9 @@ def main():
     args = parser.parse_args()
 
     if not args.force:
-        for name in [n for n in args.models if (MODELS_DIR / f"{weights_stem(n)}.engine").exists()]:
-            print(f"Skipping {name}: {weights_stem(name)}.engine already exists (--force to rebuild)")
-        args.models = [n for n in args.models if not (MODELS_DIR / f"{weights_stem(n)}.engine").exists()]
+        for name in [n for n in args.models if (MODELS_DIR / f"{MODEL_FILES[n]}.engine").exists()]:
+            print(f"Skipping {name}: {MODEL_FILES[name]}.engine already exists (--force to rebuild)")
+        args.models = [n for n in args.models if not (MODELS_DIR / f"{MODEL_FILES[n]}.engine").exists()]
 
     if len(args.models) > 1:
         # One process per model, so each build starts with all of the Jetson's shared memory free.
@@ -74,7 +74,7 @@ def main():
             # The number model reads a batch of player crops per frame.
             kwargs.update(imgsz=NUMBER_IMGSZ, dynamic=True, batch=NUMBER_BATCH)
         print(f"Exporting {name}...")
-        path = YOLO(str(MODELS_DIR / f"{weights_stem(name)}.pt")).export(**kwargs)
+        path = YOLO(str(MODELS_DIR / f"{MODEL_FILES[name]}.pt")).export(**kwargs)
         print(f"  -> {path}")
 
 
