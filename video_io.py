@@ -60,6 +60,8 @@ class FrameReader:
                     break
                 self._put(resize(frame, self.size))
                 n += 1
+        except Exception as exc:
+            self._put(exc)
         finally:
             self._put(None)  # end of video
 
@@ -73,6 +75,8 @@ class FrameReader:
 
     def __iter__(self):
         while (frame := self._queue.get()) is not None:
+            if isinstance(frame, Exception):
+                raise frame
             yield frame
 
     def close(self):
