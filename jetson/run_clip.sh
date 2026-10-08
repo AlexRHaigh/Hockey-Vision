@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
-# Run the whole pipeline on one video and write only the data files (no annotated videos):
-#   outputs/<clip>/positions.json, positions.csv, homographies.csv (and detections.json)
-#   outputs/<clip>/export/players.csv, puck.csv, frames.csv, tracks.csv, metadata.json
+# Run the whole pipeline on one video and write the data files (no annotated videos):
+#   outputs/<clip>/detections.json, positions.json, positions.csv, homographies.csv
+#   outputs/<clip>/export/  tables, play events and game_report.json (see export_data.py)
 #
 # Usage, from the repo root:  jetson/run_clip.sh videos/<clip>.mp4 [--max-frames N] [--conf X] ...
 # Extra arguments go to run_models.py, e.g. --teams SJS MTL (team_a, team_b) to read numbers
@@ -14,6 +14,6 @@ video=$1
 shift
 clip=$(basename "${video%.*}")
 
-python run_models.py "$video" --no-video --no-per-model "$@"
-python homography.py "outputs/$clip/detections.json" "$video" --no-video
+python run_models.py "$video" "$@"
+python homography.py "outputs/$clip/detections.json" "$video"
 python export_data.py "outputs/$clip"

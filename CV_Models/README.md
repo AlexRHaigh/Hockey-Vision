@@ -186,7 +186,7 @@ The three clips are 10-second (600 frames, 59.94 fps, 1080p) cuts from the full-
 
 ```bash
 python run_models.py <clips folder> --teams SJS MTL \
-    --roster rosters/2026-03-03_MTL_at_SJS.csv --output <out>
+    --roster rosters/2026-03-03_MTL_at_SJS.csv --save-video --per-model --output <out>
 ```
 
 That writes `player.mp4`, `puck.mp4`, `rink.mp4`, `dots.mp4` and `detections.json` for each clip.
