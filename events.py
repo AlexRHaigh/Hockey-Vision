@@ -103,7 +103,7 @@ def identify_players(clip, tracks):
         if t["jersey_number"]:
             pid = f"{team_label} #{t['jersey_number']}"
         else:
-            pid = f"{team_label} unidentified ({clip} track {t['track_id']})"
+            pid = f"{team_label} unidentified ({clip} track {t['track_id']} {t['class']})"
         ids[(t["track_id"], t["class"])] = pid
         info.setdefault(pid, {
             "player_id": pid, "team": t["team"], "team_abbrev": t["team_abbrev"],
