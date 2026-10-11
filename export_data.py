@@ -277,7 +277,8 @@ def export_clip(clip_dir):
         })
 
     tracks = summarise_tracks(clip, players)
-    possessions, events, player_info, directions = [], [], {}, {"A": None, "B": None}
+    possessions, events, directions = [], [], {"A": None, "B": None}
+    _, player_info = play.identify_players(clip, tracks)
     if positions:
         possessions, events, player_info, directions = play.analyze_clip(clip, frame_rows, players, pucks, tracks)
     for n, e in enumerate(events, 1):
