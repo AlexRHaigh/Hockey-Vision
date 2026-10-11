@@ -72,15 +72,6 @@ better at it. In videos the player boxes are tracked with ByteTrack, so each pla
 `track_id` from frame to frame (the `id:` in the labels). That track id is what the number model's
 votes and `export_data.py`'s distance skated are attached to.
 
-`team_a` and `team_b` are learned from the jersey colours, not from team names. Pass `--teams` to
-say which team is which (here `--teams SJS MTL`).
-
-About 8 to 9 people are found in each frame of the example clips.
-
-| clip1 | clip2 | clip3 |
-| --- | --- | --- |
-| [![player clip1](Examples/player/clip1.jpg)](Examples/player/clip1.mp4) | [![player clip2](Examples/player/clip2.jpg)](Examples/player/clip2.mp4) | [![player clip3](Examples/player/clip3.jpg)](Examples/player/clip3.mp4) |
-
 ## Puck model
 
 **`new_nano_puck.pt`** · `run_models.py` name `puck`
@@ -88,14 +79,6 @@ About 8 to 9 people are found in each frame of the example clips.
 Finds the puck. The model's one class is called `item`; `run_models.py` renames it to `puck`.
 Below a confidence of about 0.6 its detections are often ad lettering, skates or gloves, so it runs
 at `--puck-conf 0.6` by default, which is higher than the other models' 0.25.
-
-The puck is small and often hidden behind players or blurred, so it isn't found in every frame. In
-the example clips it was found in 24%, 19% and 32% of frames. `homography.py` places it on the
-rink in the frames where it is found.
-
-| clip1 | clip2 | clip3 |
-| --- | --- | --- |
-| [![puck clip1](Examples/puck/clip1.jpg)](Examples/puck/clip1.mp4) | [![puck clip2](Examples/puck/clip2.jpg)](Examples/puck/clip2.mp4) | [![puck clip3](Examples/puck/clip3.jpg)](Examples/puck/clip3.mp4) |
 
 ## Number model
 
@@ -121,21 +104,6 @@ In the examples each player is **marked with the number found on them and their 
 (`#63 Z. Ostapchuk`), in their team's colour: teal for San Jose, red for Montreal. Players stay
 unmarked until enough votes have been collected for their number.
 
-| clip1 | clip2 | clip3 |
-| --- | --- | --- |
-| [![number clip1](Examples/number/clip1.jpg)](Examples/number/clip1.mp4) | [![number clip2](Examples/number/clip2.jpg)](Examples/number/clip2.mp4) | [![number clip3](Examples/number/clip3.jpg)](Examples/number/clip3.mp4) |
-
-Players identified in each clip:
-
-| Clip | San Jose (team_a) | Montreal (team_b) |
-| --- | --- | --- |
-| clip1 | #2 Will Smith, #3 John Klingberg, #5 Vincent Desharnais, #6 Sam Dickinson, #63 Zack Ostapchuk | #8 Mike Matheson, #11 Brendan Gallagher, #14 Nick Suzuki, #17 Josh Anderson, #21 Kaiden Guhle, #24 Phillip Danault |
-| clip2 | #2 Will Smith, #3 John Klingberg, #9 Dmitry Orlov, #23 Barclay Goodrow, #30 Yaroslav Askarov (G), #63 Zack Ostapchuk, #81 Adam Gaudette | #8 Mike Matheson, #11 Brendan Gallagher, #14 Nick Suzuki |
-| clip3 | #2 Will Smith, #3 John Klingberg, #5 Vincent Desharnais, #6 Sam Dickinson, #9 Dmitry Orlov, #63 Zack Ostapchuk, #81 Adam Gaudette, #85 Shakir Mukhamadullin | #8 Mike Matheson, #11 Brendan Gallagher, #20 Juraj Slafkovský, #76 Zachary Bolduc |
-
-These are the model's readings, not checked against the broadcast frame by frame. A misread
-can still win the vote: in the clip3 image the player near the goal is tagged `#8 M. Matheson`,
-but the Matheson #8 jersey is on the untagged player at the bottom right.
 
 ## Rink model
 
@@ -158,10 +126,6 @@ On its own this model shows which part of the rink is in view. `homography.py` m
 known positions in feet. With the faceoff dots, that gives enough points to fit a homography from
 each frame's pixels to rink coordinates. About 5 markings are found per frame in the examples.
 
-| clip1 | clip2 | clip3 |
-| --- | --- | --- |
-| [![rink clip1](Examples/rink/clip1.jpg)](Examples/rink/clip1.mp4) | [![rink clip2](Examples/rink/clip2.jpg)](Examples/rink/clip2.mp4) | [![rink clip3](Examples/rink/clip3.jpg)](Examples/rink/clip3.mp4) |
-
 ## Dots model
 
 **`new_dots.pt`** · `run_models.py` name `dots`
@@ -172,37 +136,4 @@ them most when it fits the homography, and works out which dot is which from whe
 to the lines and circles the rink model found. About 2 to 3 dots are in view per frame in the
 examples.
 
-| clip1 | clip2 | clip3 |
-| --- | --- | --- |
-| [![dots clip1](Examples/dots/clip1.jpg)](Examples/dots/clip1.mp4) | [![dots clip2](Examples/dots/clip2.jpg)](Examples/dots/clip2.mp4) | [![dots clip3](Examples/dots/clip3.jpg)](Examples/dots/clip3.mp4) |
-
 ---
-
-## How the examples were made
-
-The three clips are 10-second (600 frames, 59.94 fps, 1080p) cuts from the full-game broadcast in
-`videos/`, which isn't in git. Every model was run with the game's own roster
-(`rosters/2026-03-03_MTL_at_SJS.csv`, from `fetch_roster.py --game`):
-
-```bash
-python run_models.py <clips folder> --teams SJS MTL \
-    --roster rosters/2026-03-03_MTL_at_SJS.csv --save-video --per-model --output <out>
-```
-
-That writes `player.mp4`, `puck.mp4`, `rink.mp4`, `dots.mp4` and `detections.json` for each clip.
-The number examples are drawn from `detections.json` with player boxes, digit boxes and name tags:
-
-```bash
-python CV_Models/Examples/render_numbers.py <clip>.mp4 <out>/<clip>/detections.json number.mp4
-```
-
-The videos were then scaled to 1280×720 and re-encoded with
-`ffmpeg -vf scale=1280:-2 -c:v libx264 -crf 26 -pix_fmt yuv420p`. Each image is the frame with the
-most detections for that model; for the number model it's from the second half of the clip, after
-the votes have settled.
-
-## On the Jetson
-
-`python export_engines.py` builds a TensorRT FP16 engine next to each model
-(`CV_Models/Models/<name>.engine`), and `run_models.py` uses the engine instead of the `.pt` from
-then on. See [jetson/README.md](../jetson/README.md).
