@@ -232,9 +232,11 @@ def export_clip(clip_dir):
               f"(run homography.py first to get them)")
 
     players, pucks, frame_rows = [], [], []
+    camera_segment = 0
     for f in frames:
         idx, t, dets = f["frame"], f["time_s"], f["detections"]
         pos = positions.get(idx)
+        camera_segment += bool((pos or {}).get("cut"))
         on_rink = {_box_key(pl["box_xyxy"]): pl for pl in pos["players"]} if pos else {}
 
         n_players = n_on_rink = 0
@@ -248,6 +250,7 @@ def export_clip(clip_dir):
             x1, y1, x2, y2 = d["box_xyxy"]
             players.append({
                 "clip": clip, "frame": idx, "time_s": t, "track_id": d.get("track_id"),
+                "camera_segment": camera_segment,
                 "class": d["class"], "team": team, "role": role,
                 "jersey_number": d.get("jersey_number"), "team_abbrev": d.get("team"),
                 "player_name": d.get("player_name"), "confidence": d["confidence"],
@@ -344,7 +347,8 @@ def track_distance(rows):
     on_rink = [r for r in rows if r["x_ft"] is not None]
     runs, run = [], []
     for r in on_rink:
-        if run and r["frame"] - run[-1]["frame"] > MAX_GAP_FRAMES:
+        if run and (r["frame"] - run[-1]["frame"] > MAX_GAP_FRAMES
+                    or r.get("camera_segment", 0) != run[-1].get("camera_segment", 0)):
             runs.append(run)
             run = []
         run.append(r)
@@ -520,7 +524,8 @@ def main():
         },
         "notes": {
             "distance": f"positions smoothed with a {SMOOTH_WINDOW}-frame centred moving average; no distance "
-                        f"across gaps over {MAX_GAP_FRAMES} frames; steps over {MAX_SPEED_FT_S} ft/s dropped",
+                        f"across camera cuts or gaps over {MAX_GAP_FRAMES} frames; "
+                        f"steps over {MAX_SPEED_FT_S} ft/s dropped",
             "track_id": "unique within a clip only; tracks.csv groups by (track_id, class), matching "
                         "jersey voting. Same-class ID handovers can still mix players in a scrum",
             "events": "found from rink positions only; see events.py for the rules and thresholds",
