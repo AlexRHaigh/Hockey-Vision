@@ -27,6 +27,19 @@ can't be read and one-off misreads are outvoted.
 Reading numbers is most of the GPU work per frame, so a player whose number is already settled is
 only read every --jersey-stride frames (default 5; players without a number are read every frame).
 On our test clips that reads a third fewer players with the same final numbers.
+
+Speed:
+    The frame is downscaled once to the models' input size and shared by the player, puck, rink
+    and dots models (instead of each model resizing the full-resolution frame itself); the number
+    model still reads its crops from the full-resolution frame. Camera cuts are found here, while
+    the frame is decoded anyway, and written to detections.json, so homography.py doesn't have to
+    decode the video again. Drawing and writing the outputs runs on a background thread.
+    --rink-stride N       run the rink and dots models only every N frames (and on every camera
+                          cut); homography.py holds the rink fit in between. Default 1 (every frame).
+    --int8                use INT8 TensorRT engines (<model>.int8.engine, from export_engines.py
+                          --int8) where they exist. The puck model always stays FP16.
+    --weights NAME=PATH   use these weights for one model (a .pt, .engine or exported model
+                          folder), e.g. to compare two versions of a model.
 """
 
 import argparse
@@ -41,7 +54,7 @@ from ultralytics import YOLO
 from ultralytics.cfg import DEFAULT_CFG_DICT
 
 from roster import DEFAULT_ROSTER, Roster
-from video_io import FrameReader, resize, resized_size
+from video_io import BackgroundWriter, CutDetector, FrameReader, resize, resized_size
 
 MODELS_DIR = Path(__file__).parent / "CV_Models" / "Models"
 MODEL_NAMES = ["player", "puck", "number", "rink", "dots"]
@@ -105,6 +118,14 @@ SWITCH_RATIO = 1.5          # a track's shown number only changes when another s
 SETTLED_VOTES = 8.0
 SETTLED_LEAD = 3.0
 
+# Models that may run from an INT8 engine with --int8. The puck is tiny and the model's confidence
+# threshold is tight, so it stays FP16.
+INT8_MODELS = {"player", "number", "rink", "dots"}
+# Models that see the whole frame (the number model sees player crops instead).
+FULL_FRAME_MODELS = {"player", "puck", "rink", "dots"}
+# Models that --rink-stride runs less often: rink markings only move as fast as the camera pans.
+RINK_MODELS = {"rink", "dots"}
+
 IMAGE_EXTS = {".jpg", ".jpeg", ".png", ".bmp", ".webp", ".tif", ".tiff"}
 VIDEO_EXTS = {".mp4", ".mov", ".avi", ".mkv", ".m4v", ".webm"}
 
@@ -119,12 +140,15 @@ def pick_device(requested):
     return "cpu"
 
 
-def model_path(name):
-    """The model's TensorRT engine if one has been exported, otherwise its .pt weights."""
-    engine = MODELS_DIR / f"{MODEL_FILES[name]}.engine"
-    if engine.exists():
-        return engine
-    return MODELS_DIR / f"{MODEL_FILES[name]}.pt"
+def model_path(name, int8=False):
+    """The model's TensorRT engine if one has been exported, otherwise its .pt weights. With
+    `int8`, its INT8 engine first, for the models in INT8_MODELS."""
+    stem = MODELS_DIR / MODEL_FILES[name]
+    candidates = [stem.with_suffix(".int8.engine")] if int8 and name in INT8_MODELS else []
+    for path in candidates + [stem.with_suffix(".engine")]:
+        if path.exists():
+            return path
+    return stem.with_suffix(".pt")
 
 
 def fp16_kwargs(device):
@@ -136,32 +160,66 @@ def fp16_kwargs(device):
 
 
 def engine_imgsz(path):
-    """The input size a TensorRT engine was built for ([h, w]), from the metadata Ultralytics
-    writes at the start of the file, or None for .pt weights or an engine without it."""
-    if path.suffix != ".engine":
-        return None
+    """The input size an exported model was built for ([h, w]), from the metadata Ultralytics
+    writes at the start of a TensorRT engine (or metadata.yaml in an exported model folder), or
+    None for .pt weights, a dynamic-shape export or one without it."""
     try:
-        with open(path, "rb") as f:
-            meta = json.loads(f.read(int.from_bytes(f.read(4), byteorder="little")).decode("utf-8"))
+        if path.suffix == ".engine":
+            with open(path, "rb") as f:
+                meta = json.loads(f.read(int.from_bytes(f.read(4), byteorder="little")).decode("utf-8"))
+        elif path.is_dir() and (path / "metadata.yaml").exists():
+            from ultralytics.utils import YAML
+            meta = YAML.load(path / "metadata.yaml")
+            meta["dynamic"] = meta.get("dynamic", (meta.get("args") or {}).get("dynamic"))
+        else:
+            return None
         return None if meta.get("dynamic") else meta.get("imgsz")
-    except (ValueError, UnicodeDecodeError, AttributeError):
+    except (ValueError, UnicodeDecodeError, AttributeError, OSError):
         return None
 
 
-def load_model(name):
-    path = model_path(name)
+def load_model(path):
     if not path.exists():
         sys.exit(f"Model not found: {path}")
     return YOLO(str(path), task="detect")
 
 
-def load_models(names):
-    """{name: model}"""
+def load_models(paths):
+    """{name: model} from {name: weights path}"""
     models = {}
-    for name in names:
-        print(f"  {name}: {model_path(name).name}")
-        models[name] = load_model(name)
+    for name, path in paths.items():
+        print(f"  {name}: {path.name}")
+        models[name] = load_model(path)
     return models
+
+
+def reset_tracker(model):
+    """Start the model's player tracking over (track ids from 1 again), as for a freshly loaded model."""
+    for tracker in getattr(getattr(model, "predictor", None), "trackers", None) or []:
+        tracker.reset()
+
+
+def input_size(frame, imgsz):
+    """(w, h) the models resize `frame` to for input size `imgsz` (an int, or [h, w]) before padding
+    it, or None when they wouldn't shrink it. Same rounding as Ultralytics' LetterBox, so a frame
+    resized to this goes through the model's own letterbox unscaled."""
+    h, w = frame.shape[:2]
+    th, tw = (imgsz, imgsz) if isinstance(imgsz, int) else imgsz
+    r = min(th / h, tw / w)
+    return None if r >= 1 else (round(w * r), round(h * r))
+
+
+def to_frame_coords(result, frame, size):
+    """Map a result for `frame` resized to `size` back onto `frame` itself."""
+    if size is None:
+        return result
+    h, w = frame.shape[:2]
+    data = result.boxes.data.clone()
+    data[:, [0, 2]] *= w / size[0]
+    data[:, [1, 3]] *= h / size[1]
+    result.orig_img, result.orig_shape = frame, (h, w)
+    result.update(boxes=data)
+    return result
 
 
 def kept_classes(name, model):
@@ -172,22 +230,29 @@ def kept_classes(name, model):
     return [i for i, cls in model.names.items() if cls not in excluded]
 
 
-def run_on_frame(models, frame, args, track=False):
-    """Return {model_name: ultralytics Results} for a single BGR frame, on the CPU.
+def run_on_frame(models, frame, args, track=False, skip=()):
+    """Return {model_name: ultralytics Results} for a single BGR frame, on the CPU, with boxes in
+    the frame's pixels.
 
     Thresholds and input sizes come from args.model_conf and args.model_imgsz. The number model
     isn't run here: it reads digits off the player boxes, see read_jerseys(). With `track`,
-    players get track ids that persist across calls (one video at a time).
+    players get track ids that persist across calls (one video at a time). Models named in `skip`
+    aren't run and have no entry.
     """
     out = {}
+    resized = {}  # the frame downscaled to each input size, made once for every model that needs it
     for name, model in models.items():
-        if name == "number":
+        if name not in FULL_FRAME_MODELS or name in skip:
             continue
+        size = input_size(frame, args.model_imgsz[name])
+        if size not in resized:
+            resized[size] = frame if size is None else cv2.resize(frame, size, interpolation=cv2.INTER_LINEAR)
         run = model.track if track and name == "player" else model.predict
         kwargs = {"persist": True, "tracker": "bytetrack.yaml"} if run == model.track else {}
         # Results come back on the GPU; one copy to the CPU per model beats a sync per .tolist().
-        out[name] = run(frame, conf=args.model_conf[name], imgsz=args.model_imgsz[name], device=args.device,
-                        classes=kept_classes(name, model), verbose=False, **args.fp16, **kwargs)[0].cpu()
+        result = run(resized[size], conf=args.model_conf[name], imgsz=args.model_imgsz[name], device=args.device,
+                     classes=kept_classes(name, model), verbose=False, **args.fp16, **kwargs)[0].cpu()
+        out[name] = to_frame_coords(result, frame, size)
         if name in CLASS_RENAMES:
             renames = CLASS_RENAMES[name]
             out[name].names = {i: renames.get(cls, cls) for i, cls in out[name].names.items()}
@@ -445,6 +510,8 @@ def draw_combined(frame, results, jerseys=None):
 def per_model_frame(name, frame, results, jerseys):
     if name == "number":
         return draw_numbers(frame, results, jerseys)
+    if name not in results:  # not run this frame (--rink-stride)
+        return frame
     return results[name].plot()
 
 
@@ -477,10 +544,11 @@ def process_image(path, models, args, out_dir):
 
 def process_video(path, models, args, out_dir):
     try:
-        video = FrameReader(path, args.max_frames, width=args.width)
+        video = FrameReader(path, args.max_frames, width=args.width, decoder=args.decoder)
     except OSError:
         print(f"  Could not open {path}, skipping")
         return
+    print(f"  decoding with {video.decoder}")
     fps, w, h, total = video.fps, video.width, video.height, video.total
     scale = video.source_width / video.width  # detections are written in source video pixels
 
@@ -493,19 +561,37 @@ def process_video(path, models, args, out_dir):
                 writers[name] = cv2.VideoWriter(str(out_dir / f"{name}.mp4"), fourcc, fps, (w, h))
 
     if "player" in models:
-        # A fresh player model per video, so track ids (and the tracker's state) start over.
-        models = dict(models, player=load_model("player"))
+        reset_tracker(models["player"])  # track ids (and the tracker's state) start over per video
     votes = JerseyVotes()
+    cuts = CutDetector()
 
     # Frames are written to detections.json as they're done (one per line) rather than held in
     # memory, which a full game would fill on the Jetson. The array is closed even if the run is
     # interrupted, so the frames done so far are still usable.
     detections_file = open(out_dir / "detections.json", "w")
     detections_file.write("[")
+
+    def write_outputs(idx, frame, results, jerseys, cut, rink_run):
+        """Everything after inference for one frame; runs on the background writer thread."""
+        if "combined" in writers:
+            writers["combined"].write(draw_combined(frame, results, jerseys))
+        for name in models:
+            if name in writers:
+                writers[name].write(per_model_frame(name, frame, results, jerseys))
+        record = {"frame": idx, "time_s": round(idx / fps, 3), "cut": cut}
+        if not rink_run:
+            record["rink_skipped"] = True  # homography.py holds the last rink fit
+        record["detections"] = results_to_dicts(results, jerseys, args.roster, scale)
+        detections_file.write(("\n" if idx == 0 else ",\n") + json.dumps(record))
+
+    output = BackgroundWriter()
     idx = 0
     try:
         for frame in video:
-            results = run_on_frame(models, frame, args, track=True)
+            cut = cuts.update(frame)
+            # The rink models run every rink_stride frames, and on every cut since the old fit is gone.
+            rink_run = cut or idx % args.rink_stride == 0
+            results = run_on_frame(models, frame, args, track=True, skip=() if rink_run else RINK_MODELS)
             jerseys = None
             if "number" in models:
                 # The tracker sometimes hands an id over to a nearby player; keying on the class
@@ -525,23 +611,19 @@ def process_video(path, models, args, out_dir):
                 for key, j in zip(keys, jerseys):
                     j["number"] = votes.number(key)
 
-            if "combined" in writers:
-                writers["combined"].write(draw_combined(frame, results, jerseys))
-            for name in models:
-                if name in writers:
-                    writers[name].write(per_model_frame(name, frame, results, jerseys))
-
-            detections_file.write(("\n" if idx == 0 else ",\n") + json.dumps(
-                {"frame": idx, "time_s": round(idx / fps, 3), "detections": results_to_dicts(results, jerseys, args.roster, scale)}))
+            output.submit(lambda a=(idx, frame, results, jerseys, cut, rink_run): write_outputs(*a))
             idx += 1
             if idx % 25 == 0 or idx == total:
                 print(f"\r  frame {idx}/{total or '?'}", end="", flush=True)
     finally:
-        detections_file.write("\n]\n")
-        detections_file.close()
-        video.close()
-        for wr in writers.values():
-            wr.release()
+        try:
+            output.close()
+        finally:
+            detections_file.write("\n]\n")
+            detections_file.close()
+            video.close()
+            for wr in writers.values():
+                wr.release()
     print()
 
 
@@ -581,6 +663,18 @@ def main():
                         help="In videos, re-read a player's jersey number only every N frames once it is "
                              "settled (default: 5; players without a settled number are read every frame; "
                              "1 reads every player every frame)")
+    parser.add_argument("--rink-stride", type=int, default=1,
+                        help="In videos, run the rink and dots models only every N frames, and on every "
+                             "camera cut (default: 1, every frame); homography.py holds the fit in between")
+    parser.add_argument("--int8", action="store_true",
+                        help="Use INT8 TensorRT engines (<model>.int8.engine from export_engines.py --int8) "
+                             "where they exist; the puck model always stays FP16")
+    parser.add_argument("--weights", nargs="+", default=[], metavar="NAME=PATH",
+                        help="Weights to use for a model instead of CV_Models/Models/, e.g. "
+                             "player=other/player.engine (a .pt, .engine or exported model folder)")
+    parser.add_argument("--decoder", choices=["auto", "cpu"], default="auto",
+                        help="Video decoding: auto uses the hardware decoder when there is one "
+                             "(default: auto)")
     args = parser.parse_args()
 
     if not args.source.exists():
@@ -601,9 +695,17 @@ def main():
     if not inputs:
         sys.exit(f"No images or videos found in {args.source}")
 
+    paths = {name: model_path(name, args.int8) for name in args.models}
+    for spec in args.weights:
+        name, _, weights = spec.partition("=")
+        if name not in MODEL_NAMES or not weights:
+            sys.exit(f"--weights takes NAME=PATH with NAME one of {', '.join(MODEL_NAMES)}, got {spec}")
+        if name in paths:
+            paths[name] = Path(weights)
     print(f"Loading models: {', '.join(args.models)} (device: {args.device})")
-    models = load_models(args.models)
-    args.model_imgsz = {name: engine_imgsz(model_path(name)) or args.imgsz for name in args.models}
+    models = load_models(paths)
+    args.model_imgsz = {name: engine_imgsz(path) or args.imgsz for name, path in paths.items()}
+    args.rink_stride = max(1, args.rink_stride)
 
     for path in inputs:
         out_dir = args.output / path.stem

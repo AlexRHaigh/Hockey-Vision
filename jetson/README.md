@@ -57,6 +57,32 @@ Jersey numbers are read by the YOLO number model (`CV_Models/Models/new_nums.pt`
 with the others. If a build runs out of memory, add swap on the Jetson and retry just that model with
 `--models <name>`.
 
+### Optional: INT8 engines
+
+```bash
+python export_engines.py --int8 --calib-video videos/<a full game>.mp4
+jetson/run_clip.sh videos/<clip>.mp4 --int8
+```
+
+This builds `<model>.int8.engine` for the player, number, rink and dots models, next to the FP16
+engines. Calibration uses 500 frames sampled across `--calib-video` and the player crops in them,
+kept in `CV_Models/Models/int8_calibration/`. The puck model always stays FP16. `run_models.py` uses
+the INT8 engines only when given `--int8`, and only for the models that have one, so you can run a
+clip both ways and compare the outputs.
+
+In a local test of the same calibration (ONNX Runtime INT8 on a Mac), INT8 changed 3-6% of the
+player, rink and dots boxes. It changed the number model's digit readings much more: only 53-68%
+were kept. To keep the number model at FP16, build only the others:
+`python export_engines.py --int8 --models player rink dots --calib-video ...`. TensorRT quantizes
+in its own way, so compare the Jetson's INT8 and FP16 outputs before relying on them.
+
+### Optional: hardware video decoding
+
+`run_models.py` decodes with the Jetson's NVDEC hardware decoder when OpenCV has GStreamer support
+(`python -c "import cv2; print(cv2.getBuildInformation())" | grep GStreamer`). JetPack's own
+`python3-opencv` has it; the pip `opencv-python` in the Ultralytics image doesn't. Otherwise it
+decodes on the CPU as before. Its first line of output names the decoder it used.
+
 ## 5. Run a clip
 
 ```bash
@@ -70,7 +96,10 @@ jetson/run_clip.sh videos/<clip>.mp4 --teams SJS MTL    # team_a, team_b: number
 past game's file with `--roster rosters/<date>_<away>_at_<home>.csv` (`python fetch_roster.py --game <id>`).
 
 This writes data only, no annotated videos, and reads jersey numbers with the YOLO number model
-(a player whose number is settled is re-read every 5th frame). It writes, in `outputs/<clip>/`:
+(a player whose number is settled is re-read every 5th frame). `homography.py` doesn't decode the
+video again: `run_models.py` records the camera cuts. Adding `--rink-stride 2` runs the rink and
+dots models on every other frame (and on every camera cut). It's faster, and `homography.py` holds
+the fit in between. It writes, in `outputs/<clip>/`:
 
 | File | Contents |
 |---|---|

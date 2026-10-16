@@ -73,6 +73,12 @@ hf download AlexRHaigh/Hockey-Vision --include "*.pt" --local-dir CV_Models/Mode
 to test how they do on lower-resolution video; the default is the video's own resolution.
 Detections are still written in the source video's pixels, so the later steps run unchanged.
 
+`run_models.py --rink-stride 2` runs the rink and dots models only on every other frame (and on
+every camera cut), and `homography.py` holds the rink fit in between. This makes `run_models.py`
+about 12% faster on a Mac. Players, the puck and jersey numbers stay the same; player rink
+positions move by about 0.3-0.5 ft (median). `run_models.py` records camera cuts in
+`detections.json`, so `homography.py` only decodes the video when it writes videos.
+
 `jetson/run_clip.sh <video> [--teams SJS MTL]` runs all three. Only data is written by default.
 Annotated videos are optional outputs, for checking the models by eye:
 `run_models.py --save-video` writes `combined.mp4` (`--per-model` adds one video per model), and
@@ -118,7 +124,7 @@ number is read, so treat the counts as estimates.
 | `export_data.py`, `events.py` | Turns a clip's outputs into tables, play events and `game_report.json` |
 | `fetch_roster.py`, `roster.py`, `rosters/` | NHL rosters for `--teams` / `--roster` |
 | `export_engines.py`, `jetson/` | TensorRT engines and the Docker setup for the Jetson |
-| `video_io.py` | Background-thread video decoding |
+| `video_io.py` | Background-thread video decoding (hardware decoder when available), camera-cut detection, background output writing |
 | `CV_Models/` | The models (see [CV_Models/README.md](CV_Models/README.md)) |
 | `assets/` | The rink template image (for the optional videos) |
 | `tests/` | Tests |
