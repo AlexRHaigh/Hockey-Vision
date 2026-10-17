@@ -125,9 +125,14 @@ assessment of whether to trade at all. It uses only the Python standard library 
 ```bash
 python -m webapp.server                       # http://127.0.0.1:8000 (--host 0.0.0.0 to share it)
 python -m webapp.ingest outputs/<clip>/export --roster rosters/2026-03-03_MTL_at_SJS.csv
-python -m webapp.demo                         # or: 120 made-up demo games to try it (--clear removes them)
+python -m webapp.demo                         # or: 300 made-up demo games to try it (--clear removes them)
 ```
 
+- **Overview**: your own setup rather than league totals. For your pool (or any playlist you pick)
+  it shows strength, trade urgency, the average of the last game, trend and keep / watch / trade
+  counts. It also charts your players' average score per week, lists your top performers and the
+  players needing attention (with the best available replacement), compares your form with the
+  league median by position, and lists your players' recent games and your favourites.
 - **Players**: all 32 teams from `rosters/nhl_active_players.csv` (refresh with `fetch_roster.py`;
   the server loads it into an empty database, `python -c "from webapp import db; db.load_roster(db.connect())"`
   reloads it). Each player's page has their form, trend, a chart of their game scores, what made up

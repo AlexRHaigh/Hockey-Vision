@@ -258,6 +258,43 @@ class ApiTests(unittest.TestCase):
         self.assertEqual(self.call("DELETE", f"/api/playlists/{pl['id']}")[0], 200)
         self.assertEqual(self.call("GET", f"/api/playlists/{pl['id']}")[0], 404)
 
+    def test_dashboard_is_about_your_setup(self):
+        _, empty = self.call("GET", "/api/dashboard")
+        self.assertIsNone(empty["playlist"])
+        self.assertEqual(empty["favorites"]["size"], 0)
+
+        _, watch = self.call("POST", "/api/playlists", {"name": "A watch list"})
+        _, pool = self.call("POST", "/api/playlists", {"name": "Z pool", "is_pool": True, "slots_f": 2, "slots_d": 0, "slots_g": 0})
+        for pid in (1, 2):
+            self.call("POST", f"/api/playlists/{pool['id']}/players", {"player_id": pid})
+        self.call("POST", "/api/players/4/favorite")
+        try:
+            _, d = self.call("GET", "/api/dashboard")
+            pl = d["playlist"]
+            self.assertEqual(pl["id"], pool["id"])  # pools first, whatever their name
+            self.assertEqual((pl["size"], pl["rated"], pl["games"]), (2, 2, 8))
+            self.assertEqual(pl["counts"]["trade"], 1)
+            self.assertEqual([p["player_id"] for p in pl["top"]], [1, 2])
+            self.assertEqual([p["player_id"] for p in pl["attention"]], [2])
+            self.assertEqual(d["assessment"]["playlist_id"], pool["id"])
+            # 2026-10-01..04 are a Thursday to a Sunday: one week, starting Monday 2026-09-28.
+            self.assertEqual([(w["week"], w["games"]) for w in pl["weekly"]], [("2026-09-28", 8)])
+            self.assertEqual(pl["recent"][0]["date"], "2026-10-04")
+            self.assertEqual({p["player_id"] for p in pl["recent"][0]["players"]}, {1, 2})
+            forwards = next(g for g in pl["groups"] if g["group"] == "F")
+            self.assertEqual(forwards["players"], 2)
+            self.assertIsNotNone(forwards["league_median"])
+            self.assertEqual(d["favorites"]["size"], 1)
+
+            _, other = self.call("GET", f"/api/dashboard?playlist={watch['id']}")
+            self.assertEqual((other["playlist"]["size"], other["assessment"]), (0, None))
+            self.assertEqual(self.call("GET", "/api/dashboard?playlist=999")[0], 404)
+            self.assertEqual(self.call("GET", "/api/dashboard?playlist=x")[0], 400)
+        finally:
+            self.call("DELETE", "/api/players/4/favorite")
+            for pl in (watch, pool):
+                self.call("DELETE", f"/api/playlists/{pl['id']}")
+
     def test_bad_requests(self):
         self.assertEqual(self.call("POST", "/api/playlists", {"name": "  "})[0], 400)
         self.assertEqual(self.call("POST", "/api/playlists", {"name": "x", "slots_f": 99})[0], 400)

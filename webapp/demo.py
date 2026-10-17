@@ -1,7 +1,7 @@
 """Fill the web app with made-up games, to try it before real games have been run through the
 pipeline. Demo games are labelled "Demo" everywhere in the app and can be removed in one go.
 
-    python -m webapp.demo                 # 120 demo games between the real NHL rosters
+    python -m webapp.demo                 # 300 demo games (about 7 weeks) between the real NHL rosters
     python -m webapp.demo --games 40 --seed 7
     python -m webapp.demo --clear         # remove every demo game
 
@@ -111,7 +111,7 @@ def clear(con):
 def main():
     parser = argparse.ArgumentParser(description="Add made-up demo games to the Hockey-Vision web app.")
     parser.add_argument("--db", type=Path, default=db.DEFAULT_DB, help="Database file (default: %(default)s)")
-    parser.add_argument("--games", type=int, default=120)
+    parser.add_argument("--games", type=int, default=300)
     parser.add_argument("--seed", type=int, default=2026)
     parser.add_argument("--clear", action="store_true", help="Remove every demo game instead")
     args = parser.parse_args()

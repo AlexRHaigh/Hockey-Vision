@@ -262,6 +262,10 @@ td.name small { display: block; font-weight: 400; color: var(--text-3); }
 .upgrade .arrow { color: var(--text-3); padding-top: 2px; }
 .upgrade ul { list-style: none; margin: 0; padding: 0; }
 .upgrade li { display: flex; justify-content: space-between; gap: 8px; }
+.recent-game { display: grid; grid-template-columns: 84px minmax(0, 1fr) 40px; gap: 10px; align-items: baseline; padding: 8px 0; border-top: 1px solid var(--border); }
+.recent-game:first-of-type { border-top: 0; }
+.recent-game > :first-child { white-space: nowrap; }
+.upgrade .pill { justify-self: start; }
 .gain { color: var(--good-text); font-weight: 600; font-variant-numeric: tabular-nums; }
 
 /* Playlists */
@@ -292,7 +296,7 @@ td.name small { display: block; font-weight: 400; color: var(--text-3); }
   .team-list { position: static; max-height: none; display: flex; gap: 4px; overflow-x: auto; padding: 6px; }
   .team-list button { width: auto; white-space: nowrap; }
   .team-list .count, .team-list .team-name { display: none; }
-  .grid-2 { grid-template-columns: 1fr; }
+  .grid-2 { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 640px) {
   main { padding: 16px; }

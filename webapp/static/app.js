@@ -213,49 +213,60 @@ function noGamesHelp() {
 
 // --- Charts ---
 
-function scoreChart(games, selectedId, onSelect) {
-  const data = games.slice(0, 30).reverse(); // oldest first
+// A 0-100 bar chart with the "typical game" line at 50. `items`: {key, value, tick, tip: [lines], aria}.
+function barChart(items, opts = {}) {
   // Drawn at the page's width so the text stays at its real size.
-  const W = Math.max(320, Math.min(1180, app.clientWidth - 72)), H = 220, m = { t: 12, r: 8, b: 28, l: 30 };
+  const W = Math.max(320, Math.min(1180, app.clientWidth - 72)), H = opts.height || 220, m = { t: 12, r: 8, b: 28, l: 30 };
   const iw = W - m.l - m.r, ih = H - m.t - m.b;
-  const step = iw / data.length;
-  const bw = Math.max(4, Math.min(28, step - 2));
+  const step = iw / items.length;
+  const bw = Math.max(4, Math.min(opts.maxBar || 28, step - 2));
   const y = (v) => m.t + ih - (v / 100) * ih;
-  const svgEl = s("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img",
-    "aria-label": `Game scores for the last ${data.length} games; the game log table below lists every value.` });
+  const svgEl = s("svg", { class: "chart", viewBox: `0 0 ${W} ${H}`, role: "img", "aria-label": opts.ariaLabel });
   const grid = s("g", { class: "grid" });
   for (const v of [0, 25, 50, 75, 100]) {
     grid.append(s("line", { x1: m.l, x2: W - m.r, y1: y(v), y2: y(v) }));
     svgEl.append(s("text", { x: m.l - 6, y: y(v) + 4, "text-anchor": "end" }, String(v)));
   }
   svgEl.prepend(grid);
-  data.forEach((g, i) => {
+  const every = Math.ceil(items.length / Math.max(2, Math.min(8, Math.floor(iw / 60)))); // date labels ~60px apart
+  items.forEach((item, i) => {
     const cx = m.l + step * i + step / 2;
-    const top = y(Math.max(g.score, 1));
-    const hit = s("rect", { class: "hit", x: m.l + step * i, y: m.t, width: step, height: ih, tabindex: "0",
-      "aria-label": `${g.date} ${g.label}: score ${fmt(g.score)}` });
+    const top = y(Math.max(item.value, 1));
+    const hit = s("rect", { class: opts.onSelect ? "hit" : "hit static", x: m.l + step * i, y: m.t, width: step, height: ih,
+      tabindex: "0", "aria-label": item.aria });
     // Bar: rounded top, square at the baseline.
     const r = Math.min(4, bw / 2);
     const x0 = cx - bw / 2, x1 = cx + bw / 2, base = y(0);
-    const bar = s("path", { class: `bar${g.game_id === selectedId ? " selected" : ""}`,
+    const bar = s("path", { class: `bar${item.key === opts.selected ? " selected" : ""}`,
       d: `M${x0},${base} V${top + r} Q${x0},${top} ${x0 + r},${top} H${x1 - r} Q${x1},${top} ${x1},${top + r} V${base} Z` });
-    const tip = (e) => showTip(e, `${fmt(g.score)} score`, `${g.label}`, `${g.date} · ${fmt(g.minutes, 1)} min seen (${g.confidence} confidence)`);
+    const tip = (e) => showTip(e, ...item.tip);
     hit.addEventListener("pointermove", tip);
     hit.addEventListener("focus", tip);
     hit.addEventListener("pointerleave", hideTip);
     hit.addEventListener("blur", hideTip);
-    hit.addEventListener("click", () => onSelect(g));
-    hit.addEventListener("keydown", (e) => { if (e.key === "Enter") onSelect(g); });
+    if (opts.onSelect) {
+      hit.addEventListener("click", () => opts.onSelect(item));
+      hit.addEventListener("keydown", (e) => { if (e.key === "Enter") opts.onSelect(item); });
+    }
     svgEl.append(hit, bar);
-    const every = Math.ceil(data.length / 8);
-    if (i % every === 0 || i === data.length - 1) {
-      svgEl.append(s("text", { x: cx, y: H - 8, "text-anchor": "middle" }, g.date.slice(5)));
+    if ((items.length - 1 - i) % every === 0) { // counted back from the newest, which is always labelled
+      svgEl.append(s("text", { x: cx, y: H - 8, "text-anchor": "middle" }, item.tick));
     }
   });
   svgEl.append(s("line", { class: "ref", x1: m.l, x2: W - m.r, y1: y(50), y2: y(50) }));
   return h("div", {}, svgEl,
-    h("div", { class: "legend" }, h("span", {}, h("i", {}), "Game score (select a bar for its breakdown)"),
+    h("div", { class: "legend" }, h("span", {}, h("i", {}), opts.label),
       h("span", {}, h("i", { class: "dash" }), "50 = a typical game")));
+}
+
+function scoreChart(games, selectedId, onSelect) {
+  const data = games.slice(0, 30).reverse(); // oldest first
+  return barChart(data.map((g) => ({
+    key: g.game_id, value: g.score, tick: g.date.slice(5), game: g,
+    aria: `${g.date} ${g.label}: score ${fmt(g.score)}`,
+    tip: [`${fmt(g.score)} score`, g.label, `${g.date} · ${fmt(g.minutes, 1)} min seen (${g.confidence} confidence)`],
+  })), { selected: selectedId, onSelect: (item) => onSelect(item.game), label: "Game score (select a bar for its breakdown)",
+    ariaLabel: `Game scores for the last ${data.length} games; the game log table below lists every value.` });
 }
 
 function breakdown(g) {
@@ -275,40 +286,127 @@ function breakdown(g) {
 
 // --- Pages ---
 
-async function pageHome() {
-  const [summary, top, lists] = await Promise.all([get("/api/summary"), get("/api/players?sort=form&rated=1&limit=10"), get("/api/playlists")]);
-  const pools = lists.filter((l) => l.is_pool);
-  const assessments = await Promise.all(pools.map((p) => get(`/api/playlists/${p.id}/assessment`)));
-  const body = [
-    pageHead("Overview", "Every NHL player, scored from the games Hockey-Vision has analysed."),
-    h("div", { class: "tiles" },
-      tile("Teams", summary.teams), tile("Players", summary.players, "active NHL rosters"),
-      tile("Games analysed", summary.games, summary.demo_games ? `${summary.demo_games} of them demo games` : null),
-      tile("Players rated", summary.rated_players, "with at least one game")),
-  ];
-  if (!summary.games) body.push(noGamesHelp());
-  const poolCard = h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Your pools"),
-    h("a", { href: "#/playlists" }, "Manage playlists")));
-  if (!pools.length) {
-    poolCard.append(h("p", { class: "muted" }, "Make a playlist and mark it as a pool to get trade calls and a strength assessment."));
-  } else {
-    pools.forEach((p, i) => {
-      const a = assessments[i];
-      poolCard.append(h("a", { class: "upgrade", href: `#/playlist/${p.id}` },
-        h("div", {}, h("b", {}, p.name), h("div", { class: "small muted" }, `${p.players} players`)),
-        h("span", { class: "arrow" }, ""),
-        h("div", {}, h("div", {}, a.verdict_label),
-          h("div", { class: "small muted" }, a.strength !== null ? `Strength ${fmt(a.strength)} (${a.grade}) · urgency ${a.urgency}/100` : "Not rated yet"))));
-    });
+function storedOverview() {
+  try { return localStorage.getItem("hv-overview-playlist"); } catch { return null; }
+}
+
+async function loadDashboard(id) {
+  if (!id) return get("/api/dashboard");
+  try {
+    return await get(`/api/dashboard?playlist=${encodeURIComponent(id)}`);
+  } catch {
+    return get("/api/dashboard"); // the remembered playlist was deleted
   }
-  const topCard = h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "In form"),
-    h("a", { href: "#/players?sort=form&rated=1" }, "All players by form")), playerTable(top, { compact: true, empty: "No rated players yet." }));
-  body.push(h("div", { class: "grid-2" }, topCard, h("div", { class: "stack" }, poolCard, scoreHelp(summary))));
+}
+
+async function pageHome(params) {
+  const d = await loadDashboard(params.get("playlist") || storedOverview());
+  const pl = d.playlist;
+  if (!pl) {
+    const create = playlistForm({ name: "My pool", is_pool: true }, async (body) => {
+      await api("POST", "/api/playlists", body);
+      toast(`Created ${body.name}`);
+      route();
+    }, "Create my pool");
+    return [pageHead("Your overview", "Set up your pool and this page tracks how your players are doing, who to trade and whether to trade at all."),
+      h("div", { class: "card" }, h("h2", { style: "margin-bottom:12px" }, "Set up your pool"), create),
+      favoritesCard(d.favorites), scoreHelp(d)];
+  }
+
+  const picker = h("select", { "aria-label": "Playlist to show" }, d.playlists.map((l) =>
+    h("option", { value: l.id }, `${l.name}${l.is_pool ? " (pool)" : ""}`)));
+  picker.value = String(pl.id);
+  picker.addEventListener("change", () => {
+    try { localStorage.setItem("hv-overview-playlist", picker.value); } catch { /* not remembered */ }
+    go(`#/?playlist=${picker.value}`);
+  });
+  const a = d.assessment;
+  const body = [pageHead("Your overview",
+    `How ${pl.name} is doing, from ${pl.games} player-game${pl.games === 1 ? "" : "s"} analysed${d.demo_games ? " (including demo games)" : ""}.`,
+    picker, h("a", { class: "btn", href: `#/playlist/${pl.id}` }, pl.is_pool ? "Full assessment" : "Open playlist"))];
+
+  if (a && a.verdict !== "empty") {
+    const iconPath = { hold: ICONS.keep, targeted: ICONS.watch, active: ICONS.trade }[a.verdict];
+    body.push(h("div", { class: `verdict ${a.verdict}`, style: "margin-bottom:16px" }, icon(iconPath, "icon"),
+      h("div", {}, h("h2", {}, a.verdict_label), h("ul", {}, a.reasons.slice(0, 3).map((r) => h("li", {}, r))))));
+  }
+  if (!pl.size) {
+    body.push(h("div", { class: "card empty" }, h("h2", {}, `${pl.name} has no players yet`),
+      h("p", {}, h("a", { href: `#/playlist/${pl.id}` }, "Add players"), " to see their statistics here.")));
+    body.push(favoritesCard(d.favorites), scoreHelp(d));
+    return body;
+  }
+
+  const c = pl.counts;
+  body.push(h("div", { class: "tiles" },
+    a ? tile("Pool strength", a.strength === null ? "–" : [fmt(a.strength), h("span", { class: "muted", style: "font-size:1rem" }, ` ${a.grade}`)], "mean form; 50 = typical")
+      : tile("Average form", fmt(pl.form), "50 = typical"),
+    tile("Average last game", fmt(pl.last), "of your rated players"),
+    tile("Trend", pl.trend === null ? "–" : trend(pl.trend), "last 3 games vs before"),
+    a ? tile("Trade urgency", `${a.urgency}`, "0 hold · 100 rebuild") : null,
+    tile("Calls", `${c.keep} · ${c.watch} · ${c.trade}`, `keep · watch · trade${c.hold ? ` · ${c.hold} on hold` : ""}`),
+    tile("Players rated", `${pl.rated}/${pl.size}`, pl.rated < pl.size ? "the rest have no games yet" : "all have games")));
+
+  body.push(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Your players by week")),
+    pl.weekly.length ? barChart(pl.weekly.map((w) => ({
+      key: w.week, value: w.score, tick: w.week.slice(5),
+      aria: `Week of ${w.week}: average score ${fmt(w.score)} over ${w.games} player-games`,
+      tip: [`${fmt(w.score)} average score`, `Week of ${w.week}`, `${w.games} player-game${w.games === 1 ? "" : "s"}`],
+    })), { maxBar: 48, height: 200, label: "Average game score of your players, per week",
+      ariaLabel: `Average game score of ${pl.name}'s players for the last ${pl.weekly.length} weeks.` })
+      : h("p", { class: "muted" }, "None of your players have analysed games yet.")));
+
+  body.push(h("div", { class: "grid-2" },
+    h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Your top performers")),
+      playerTable(pl.top, { compact: true, empty: "No rated players yet." })),
+    h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Needs attention")),
+      pl.attention.length ? pl.attention.map((p) => h("div", { class: "upgrade" },
+        h("div", {}, h("a", { href: `#/player/${p.player_id}` }, h("b", {}, p.name)),
+          h("div", { class: "small muted" }, `${POS_SHORT[p.position] || ""} · ${p.team} · form ${fmt(p.form.form)}`)),
+        pill(p.recommendation),
+        h("div", { class: "small" }, p.upgrade
+          ? ["Try ", h("a", { href: `#/player/${p.upgrade.player_id}` }, p.upgrade.name), ` (${p.upgrade.team}) `, h("span", { class: "gain" }, `+${fmt(p.upgrade.gain)}`)]
+          : h("span", { class: "muted" }, p.recommendation.reason))))
+        : h("p", { class: "muted" }, "Nobody is on Watch or Trade."))));
+
+  body.push(h("div", { class: "grid-2" },
+    h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "By position"),
+      h("span", { class: "small muted" }, "your form vs the league median")),
+      h("div", { class: "table-wrap" }, h("table", {},
+        h("thead", {}, h("tr", {}, h("th", {}, "Position"), h("th", { class: "r" }, "Players"), h("th", {}, "Your form"),
+          h("th", { class: "r" }, "League"), h("th", { class: "r" }, "Diff"))),
+        h("tbody", {}, pl.groups.map((g) => {
+          const diff = g.form !== null && g.league_median !== null ? g.form - g.league_median : null;
+          return h("tr", {}, h("td", {}, g.name), h("td", { class: "r num" }, g.players), h("td", {}, meter(g.form)),
+            h("td", { class: "r num" }, fmt(g.league_median)), h("td", { class: "r" }, trend(diff)));
+        }))))),
+    h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Your players' recent games")),
+      pl.recent.length ? pl.recent.map((g) => h("div", { class: "recent-game" },
+        h("div", { class: "small muted num" }, g.date),
+        h("div", {}, h("a", { href: `#/game/${g.game_id}` }, g.label), g.is_demo ? [" ", h("span", { class: "badge" }, "Demo")] : null,
+          h("div", { class: "small" }, g.players.map((p, i) => [i ? " · " : "", h("a", { href: `#/player/${p.player_id}` }, p.name), " ",
+            h("span", { class: "muted num" }, fmt(p.score))]))),
+        h("div", { class: "num r" }, h("b", {}, fmt(g.score)))))
+        : h("p", { class: "muted" }, "No analysed games yet."))));
+
+  body.push(favoritesCard(d.favorites), scoreHelp(d));
   return body;
 }
 
-function scoreHelp(summary) {
-  const t = summary.thresholds;
+function favoritesCard(f) {
+  const card = h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Your favourites"),
+    f.size ? h("a", { href: "#/favorites" }, `All ${f.size}`) : null));
+  if (!f.size) {
+    card.append(h("p", { class: "muted" }, "Star players anywhere in the app to follow them here."));
+    return card;
+  }
+  card.append(h("p", { class: "small muted" }, `Average form ${fmt(f.form)} · last game ${fmt(f.last)} · ${f.counts.keep} keep, ${f.counts.watch} watch, ${f.counts.trade} trade`),
+    playerTable(f.top, { compact: true, empty: "None of your favourites have games yet." }));
+  return card;
+}
+
+function scoreHelp(d) {
+  const t = d.thresholds;
   return h("div", { class: "card help" }, h("h2", {}, "How scores work"),
     h("dl", {},
       h("dt", {}, "Game score (0–100)"),

@@ -6,6 +6,8 @@ cached until games are imported or removed.
 """
 
 import threading
+from datetime import date, timedelta
+from statistics import mean, median
 
 from . import db, scoring
 
@@ -280,21 +282,94 @@ def assessment(con, params, body, playlist_id):
 
 # --- overview ---
 
-def summary(con, params, body):
-    data = scored(con)
-    counts = con.execute("""SELECT (SELECT COUNT(*) FROM players) AS players,
-                                   (SELECT COUNT(DISTINCT team) FROM players) AS teams,
-                                   (SELECT COUNT(*) FROM games) AS games,
-                                   (SELECT COUNT(*) FROM games WHERE is_demo) AS demo_games,
-                                   (SELECT COUNT(*) FROM favorites) AS favorites,
-                                   (SELECT COUNT(*) FROM playlists) AS playlists""").fetchone()
-    return {**dict(counts), "rated_players": len(data["forms"]), "calibration": data["calibration"],
-            "thresholds": {"trade_below": scoring.TRADE_BELOW, "watch_below": scoring.WATCH_BELOW,
-                           "core_above": scoring.CORE_ABOVE, "min_games": scoring.MIN_GAMES}}
+OVERVIEW_WEEKS = 8
+OVERVIEW_GAMES = 6
+OVERVIEW_PLAYERS = 5
+
+
+def _week(day):
+    d = date.fromisoformat(day)
+    return (d - timedelta(days=d.weekday())).isoformat()
+
+
+def _mean(values):
+    values = [v for v in values if v is not None]
+    return round(mean(values), 1) if values else None
+
+
+def _setup_stats(data, members, league_medians):
+    """Statistics for a group of your players: form, calls, weekly scores, position groups, their
+    recent games, the best of them and the ones needing attention."""
+    rated = [p for p in members if p["form"]["games"]]
+    games = [g for p in members for g in data["by_player"].get(p["player_id"], [])]
+    names = {p["player_id"]: p["name"] for p in members}
+
+    weekly = {}
+    for g in games:
+        weekly.setdefault(_week(g["date"]), []).append(g["score"])
+    by_game = {}
+    for g in games:
+        by_game.setdefault(g["game_id"], []).append(g)
+    recent = sorted(by_game.values(), key=lambda gs: (gs[0]["date"], gs[0]["game_id"]), reverse=True)[:OVERVIEW_GAMES]
+
+    groups = []
+    for key, name in scoring.GROUP_NAMES.items():
+        forms = [p["form"]["form"] for p in rated if p["group"] == key]
+        groups.append({"group": key, "name": name, "players": sum(p["group"] == key for p in members),
+                       "rated": len(forms), "form": _mean(forms), "league_median": league_medians.get(key)})
+    by_form = sorted(rated, key=lambda p: -p["form"]["form"])
+    return {
+        "size": len(members), "rated": len(rated), "games": len(games),
+        "form": _mean(p["form"]["form"] for p in rated), "last": _mean(p["form"]["last"] for p in rated),
+        "trend": _mean(p["form"]["trend"] for p in rated),
+        "counts": {a: sum(p["recommendation"]["action"] == a for p in members) for a in ("keep", "watch", "trade", "hold")},
+        "weekly": [{"week": w, "score": round(mean(v), 1), "games": len(v)} for w, v in sorted(weekly.items())[-OVERVIEW_WEEKS:]],
+        "groups": groups,
+        "recent": [{"game_id": gs[0]["game_id"], "date": gs[0]["date"], "label": gs[0]["label"], "is_demo": gs[0]["is_demo"],
+                    "score": _mean(g["score"] for g in gs),
+                    "players": [{"player_id": g["player_id"], "name": names[g["player_id"]], "score": g["score"]}
+                                for g in sorted(gs, key=lambda g: -g["score"])]} for gs in recent],
+        "top": by_form[:OVERVIEW_PLAYERS],
+        "attention": sorted((p for p in rated if p["recommendation"]["action"] in ("trade", "watch")),
+                            key=lambda p: p["form"]["form"])[:OVERVIEW_PLAYERS],
+    }
+
+
+def dashboard(con, params, body):
+    """The overview of your own setup: one of your playlists (?playlist=, else your first pool) and
+    your favourites, measured against the league."""
+    lists = playlists(con, {}, {})
+    try:
+        chosen = int(params["playlist"]) if params.get("playlist") else (lists[0]["id"] if lists else None)
+    except ValueError:
+        raise ApiError(400, "playlist must be a playlist id")
+    data, favs = scored(con), _favorites(con)
+    everyone = [_player(r, data, favs) for r in con.execute("SELECT * FROM players")]
+    league_medians = {}
+    for key in scoring.GROUP_NAMES:
+        forms = [p["form"]["form"] for p in everyone if p["group"] == key and p["form"]["games"]]
+        league_medians[key] = round(median(forms), 1) if forms else None
+
+    out = {"playlists": lists, "playlist": None, "assessment": None,
+           "favorites": _setup_stats(data, [p for p in everyone if p["favorite"]], league_medians),
+           "demo_games": con.execute("SELECT COUNT(*) FROM games WHERE is_demo").fetchone()[0],
+           "thresholds": {"trade_below": scoring.TRADE_BELOW, "watch_below": scoring.WATCH_BELOW,
+                          "core_above": scoring.CORE_ABOVE, "min_games": scoring.MIN_GAMES}}
+    if chosen is not None:
+        row = _get_playlist_row(con, chosen)
+        ids = set(_members(con, chosen))
+        members = [p for p in everyone if p["player_id"] in ids]
+        out["playlist"] = {**_playlist_out(row), **_setup_stats(data, members, league_medians)}
+        if row["is_pool"]:
+            out["assessment"] = assessment(con, {}, {}, chosen)
+            best = {u["out"]["player_id"]: u["targets"][0] for u in out["assessment"]["upgrades"]}
+            for p in out["playlist"]["attention"]:
+                p["upgrade"] = best.get(p["player_id"])
+    return out
 
 
 ROUTES = [
-    ("GET", r"/api/summary", summary),
+    ("GET", r"/api/dashboard", dashboard),
     ("GET", r"/api/teams", teams),
     ("GET", r"/api/players", players),
     ("GET", r"/api/players/(\d+)", player),
