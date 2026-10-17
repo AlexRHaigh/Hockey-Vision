@@ -14,8 +14,10 @@ This writes, next to the detections file:
     positions.csv     one row per player or puck per frame: rink x, y in feet (and track id, jersey
                       number, and player name when run_models.py was given --teams)
     homographies.csv  one row per frame: the 3x3 image -> rink homography, h00..h22 (empty if no fit)
-The video is read for its frame size and to spot camera cuts. Videos are optional outputs, for
-checking the fit by eye: --save-video writes side_by_side.mp4 (the video with the top-down rink
+The video's frames are only decoded when they're needed: for the videos below, or to spot camera
+cuts when detections.json is from a run_models.py that didn't record them. Frames run_models.py
+skipped the rink models on (--rink-stride) keep the previous frame's fit. Videos are optional
+outputs, for checking the fit by eye: --save-video writes side_by_side.mp4 (the video with the top-down rink
 view beside it), and --debug adds radar.mp4 (top-down view with the keypoints the fit used) and
 overlay.mp4 (rink keypoints reprojected onto the video).
 
@@ -40,7 +42,7 @@ import numpy as np
 
 import rink
 from rink import KEYPOINTS
-from video_io import FrameReader
+from video_io import CutDetector, FrameReader, video_info
 
 MIN_POINTS = 4
 OUTLIER_FT = 6.0  # a match further than this from the fit is a wrong identification
@@ -67,7 +69,6 @@ MIN_PLAYERS_FOR_SPREAD = 4
 PLAYER_HEIGHT_RANGE_FT = (3.0, 9.0)
 MIN_PLAYERS_FOR_HEIGHT = 3
 LINE_END_TOL_PX = 40  # a line box corner must be this close to where the fit predicts the line ends
-CUT_CORRELATION = 0.7  # consecutive frames whose colour histograms correlate less than this are a camera cut
 
 PLAYER_CLASSES = {"team_a_player", "team_b_player", "goalie_a", "goalie_b", "referee"}
 PLAYER_COLORS = {  # BGR
@@ -784,11 +785,14 @@ def main():
     out_dir = args.detections.parent
     output = args.output or out_dir / "side_by_side.mp4"
 
+    # run_models.py records camera cuts while it has the frames decoded; older detections.json
+    # files don't have them, and then the video is decoded here to find them.
+    need_frames = args.save_video or args.debug or any("cut" not in f for f in frames)
     try:
-        video = FrameReader(args.video, len(frames))
+        fps, width, height, _ = video_info(args.video)
+        video = FrameReader(args.video, len(frames)) if need_frames else None
     except OSError as e:
         raise SystemExit(str(e))
-    fps, width, height = video.fps, video.width, video.height
     frame_size = (width, height)
     panel_width = int(width * 0.75)
 
@@ -806,23 +810,23 @@ def main():
     tracker = HomographyTracker()
     positions = []
     rejected_counts = {"players_clustered": 0, "player_scale": 0}
-    prev_hist = None
+    cuts = CutDetector()
+    view = "side"
     try:
-        for f, frame in zip(frames, video):
+        for f, frame in zip(frames, video if video is not None else itertools.repeat(None)):
             dets = f["detections"]
 
-            # The colour histogram of a quarter-size frame is as good for spotting cuts, and much cheaper.
-            small = cv2.resize(frame, (width // 4, height // 4), interpolation=cv2.INTER_AREA)
-            hist = cv2.calcHist([cv2.cvtColor(small, cv2.COLOR_BGR2HSV)], [0, 1], None, [32, 32], [0, 180, 0, 256])
-            cv2.normalize(hist, hist)
-            cut = prev_hist is not None and cv2.compareHist(prev_hist, hist, cv2.HISTCMP_CORREL) < CUT_CORRELATION
+            cut = f["cut"] if "cut" in f else cuts.update(frame)
             if cut:
                 tracker.reset()
-            prev_hist = hist
 
-            matches, lines, view = match_keypoints(dets, frame_size)
-            H_frame, inliers = compute_homography(matches, lines, frame_size)
-            H = tracker.update(H_frame, frame_size)
+            if f.get("rink_skipped"):
+                # run_models.py --rink-stride didn't run the rink models: keep the last fit.
+                inliers, H = [], tracker.H
+            else:
+                matches, lines, view = match_keypoints(dets, frame_size)
+                H_frame, inliers = compute_homography(matches, lines, frame_size)
+                H = tracker.update(H_frame, frame_size)
             players = project_players(dets, H)
             puck = project_puck(dets, H)
 
@@ -860,7 +864,8 @@ def main():
                 print(f"\r  frame {len(positions)}/{len(frames)}", end="", flush=True)
     finally:
         print()
-        video.close()
+        if video is not None:
+            video.close()
         for w in (out, radar_out, overlay_out):
             if w is not None:
                 w.release()
