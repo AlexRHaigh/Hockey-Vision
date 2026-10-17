@@ -222,5 +222,8 @@ __marimo__/
 # Streamlit
 .streamlit/secrets.toml
 
+# The web app's database
+webapp/*.db
+
 # Annotated outputs from run_models.py
 outputs/

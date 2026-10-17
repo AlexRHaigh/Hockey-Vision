@@ -1,0 +1,32 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Hockey-Vision</title>
+  <link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Cellipse cx='16' cy='20' rx='12' ry='5' fill='%232a78d6'/%3E%3Cellipse cx='16' cy='16' rx='12' ry='5' fill='%23184f95'/%3E%3C/svg%3E">
+  <link rel="stylesheet" href="/style.css">
+</head>
+<body>
+  <header class="topbar">
+    <a class="brand" href="#/">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><ellipse cx="16" cy="20" rx="12" ry="5" class="puck-side"/><ellipse cx="16" cy="16" rx="12" ry="5" class="puck-top"/></svg>
+      Hockey-Vision
+    </a>
+    <nav class="nav" aria-label="Main">
+      <a href="#/" data-nav="home">Overview</a>
+      <a href="#/players" data-nav="players">Players</a>
+      <a href="#/games" data-nav="games">Games</a>
+      <a href="#/favorites" data-nav="favorites">Favourites</a>
+      <a href="#/playlists" data-nav="playlists">Playlists &amp; pools</a>
+    </nav>
+    <button class="icon-btn" id="theme-toggle" type="button" aria-label="Switch light or dark theme" title="Switch theme">
+      <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 3a9 9 0 1 0 9 9 7 7 0 0 1-9-9z"/></svg>
+    </button>
+  </header>
+  <main id="app" tabindex="-1"></main>
+  <div id="toast" role="status" aria-live="polite"></div>
+  <div id="tooltip" role="tooltip" hidden></div>
+  <script src="/app.js"></script>
+</body>
+</html>

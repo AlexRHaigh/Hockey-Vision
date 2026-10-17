@@ -115,6 +115,44 @@ Which way each team attacks comes from where the goalies stand. Times are video 
 game clock. The puck is only seen in part of the frames and players are only named once their
 number is read, so treat the counts as estimates.
 
+## Web app
+
+`webapp/` is a web app on top of the exported data: every NHL team's players, a 0-100 score for
+each player in each analysed game, favourites, playlists, and hockey pools with trade calls and an
+assessment of whether to trade at all. It uses only the Python standard library (SQLite and
+`http.server`), so it runs wherever the pipeline does.
+
+```bash
+python -m webapp.server                       # http://127.0.0.1:8000 (--host 0.0.0.0 to share it)
+python -m webapp.ingest outputs/<clip>/export --roster rosters/2026-03-03_MTL_at_SJS.csv
+python -m webapp.demo                         # or: 120 made-up demo games to try it (--clear removes them)
+```
+
+- **Players**: all 32 teams from `rosters/nhl_active_players.csv` (refresh with `fetch_roster.py`;
+  the server loads it into an empty database, `python -c "from webapp import db; db.load_roster(db.connect())"`
+  reloads it). Each player's page has their form, trend, a chart of their game scores, what made up
+  each score, and their game log.
+- **Imports**: `webapp.ingest` reads an export's `player_stats.csv` and matches players to NHL ids
+  by team and jersey number, so the clip must have been run with `--teams`. With `--roster` (the
+  `fetch_roster.py --game` file) the game's date and teams come from the roster; otherwise pass
+  `--date`, `--away` and `--home`. Importing the same folder again replaces the game.
+- **Game score**: each counted play is worth impact points (takeaway +2, good pass +1, turnover -2,
+  ...), turned into points per minute the player was detected, blended with 3 minutes of typical
+  play so brief appearances can't run away, and compared with every other player-game in the
+  database: 50 is a typical game, 73 one spread better, 88 two. Goalies are scored on saves,
+  recoveries and possible goals against.
+- **Form and trade calls**: form is the last 5 scores, recent and longer-seen games counting more.
+  A player is *Trade* below 40 form, *Watch* below 46 or after a 10-point slide, *Keep* otherwise,
+  and *Hold* until 3 games are in.
+- **Pools**: a playlist marked as a pool, with its league's forward / defense / goalie slots, gets
+  a strength grade, depth against the slots, the best available upgrade at each weak spot, and a
+  0-100 trade urgency: *hold*, *make a targeted trade*, or *be active*.
+
+The weights and thresholds are all in `webapp/scoring.py`. Scores come from what the video picks
+up, so treat them as estimates, like the counts they are built from. The database is
+`webapp/hockey_vision.db` (`--db` to use another); there are no user accounts, so everyone who can
+reach the server shares the favourites and playlists.
+
 ## Repository layout
 
 | Path | Contents |
@@ -123,6 +161,7 @@ number is read, so treat the counts as estimates.
 | `homography.py`, `rink.py` | Maps detections onto the rink; rink geometry and the template drawing |
 | `export_data.py`, `events.py` | Turns a clip's outputs into tables, play events and `game_report.json` |
 | `fetch_roster.py`, `roster.py`, `rosters/` | NHL rosters for `--teams` / `--roster` |
+| `webapp/` | The web app: server, scores and trade calls, importing exports, the page in `static/` |
 | `export_engines.py`, `jetson/` | TensorRT engines and the Docker setup for the Jetson |
 | `video_io.py` | Background-thread video decoding (hardware decoder when available), camera-cut detection, background output writing |
 | `CV_Models/` | The models (see [CV_Models/README.md](CV_Models/README.md)) |
