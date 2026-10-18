@@ -8,6 +8,7 @@ Players are matched to NHL player ids by team and jersey number (the name breaks
 must have been run with run_models.py --teams. With --roster (the fetch_roster.py --game file the
 clip was run with) the game's date and teams come from it and players are matched against exactly
 who dressed; otherwise against the active rosters. Importing the same folder again replaces it.
+With --game-id the game's official box score is fetched from the NHL too (nhl.py).
 """
 
 import argparse
@@ -20,10 +21,10 @@ from datetime import date as Date
 from pathlib import Path
 
 try:
-    from . import db
+    from . import db, nhl
 except ImportError:  # run as a script
     sys.path.insert(0, str(Path(__file__).resolve().parents[1]))
-    from webapp import db
+    from webapp import db, nhl
 
 GAME_ROSTER = re.compile(r"(\d{4}-\d{2}-\d{2})_([A-Z]{3})_at_([A-Z]{3})$")
 TEXT_COLUMNS = {"player_id", "team", "team_abbrev", "jersey_number", "player_name", "role", "identified"}
@@ -151,6 +152,13 @@ def main():
         game = con.execute("SELECT label, date FROM games WHERE id = ?", (game_id,)).fetchone()
         print(f"{export_dir}: game {game_id} ({game['label']}, {game['date']}): {matched} players"
               + (f", {skipped} rows not matched to a player (unidentified or not on the roster)" if skipped else ""))
+    if args.game_id:
+        try:
+            box, lines = nhl.sync_boxscore(con, args.game_id)
+            print(f"Official box score: {box['away']} {box['away_score']} at {box['home']} {box['home_score']}, "
+                  f"{len(lines)} player lines")
+        except nhl.NhlError as e:
+            print(f"Couldn't fetch the official box score ({e}); `python -m webapp.nhl sync` retries it")
 
 
 if __name__ == "__main__":

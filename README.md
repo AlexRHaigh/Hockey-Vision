@@ -133,6 +133,17 @@ python -m webapp.demo                         # or: 300 made-up demo games to tr
   counts. It also charts your players' average score per week, lists your top performers and the
   players needing attention (with the best available replacement), compares your form with the
   league median by position, and lists your players' recent games and your favourites.
+- **NHL data**: official, up-to-date information from the NHL's public API (documented at
+  [gitlab.com/dword4/nhlapi](https://gitlab.com/dword4/nhlapi), `new-api.md`), refreshed with
+  `python -m webapp.nhl sync` or the *Refresh NHL data* button on the overview:
+  standings, current rosters (trades and call-ups move players; headshots, handedness, height,
+  weight, birth date and place), every player's season totals (GP, G, A, P, +/-, PIM, PPP, SOG,
+  TOI/GP; goalies W, L, OTL, GAA, SV%, SO) and this week's schedule. Player pages also fetch the
+  player's last 5 games, draft and career totals when opened, cached for 6 hours. Imported games
+  with an NHL game id (`webapp.ingest --game-id`, or `python -m webapp.nhl boxscore <id>`) get the
+  official box score: final score, and each player's goals, assists and TOI next to their video
+  score. The overview adds your pool's NHL points, goalie wins and games this week. The video
+  scores and trade calls don't use the NHL data; it is shown alongside them.
 - **Players**: all 32 teams from `rosters/nhl_active_players.csv` (refresh with `fetch_roster.py`;
   the server loads it into an empty database, `python -c "from webapp import db; db.load_roster(db.connect())"`
   reloads it). Each player's page has their form, trend, a chart of their game scores, what made up
@@ -166,7 +177,7 @@ reach the server shares the favourites and playlists.
 | `homography.py`, `rink.py` | Maps detections onto the rink; rink geometry and the template drawing |
 | `export_data.py`, `events.py` | Turns a clip's outputs into tables, play events and `game_report.json` |
 | `fetch_roster.py`, `roster.py`, `rosters/` | NHL rosters for `--teams` / `--roster` |
-| `webapp/` | The web app: server, scores and trade calls, importing exports, the page in `static/` |
+| `webapp/` | The web app: server, scores and trade calls, importing exports, NHL API data (`nhl.py`), the page in `static/` |
 | `export_engines.py`, `jetson/` | TensorRT engines and the Docker setup for the Jetson |
 | `video_io.py` | Background-thread video decoding (hardware decoder when available), camera-cut detection, background output writing |
 | `CV_Models/` | The models (see [CV_Models/README.md](CV_Models/README.md)) |

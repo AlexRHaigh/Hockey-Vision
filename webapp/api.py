@@ -2,14 +2,17 @@
 requests to them (ROUTES); tests call them directly.
 
 Scores depend on every game in the database (scoring.calibrate), so they are computed together and
-cached until games are imported or removed.
+cached until games are imported or removed. Official NHL data (season totals, standings, schedule,
+box scores) comes from the tables nhl.py fills, so pages never wait on the NHL's API, except a
+player's NHL page (player_nhl), which is fetched when first opened.
 """
 
+import json
 import threading
 from datetime import date, timedelta
 from statistics import mean, median
 
-from . import db, scoring
+from . import db, nhl, scoring
 
 
 class ApiError(Exception):
@@ -49,11 +52,21 @@ def scoring_inputs(row):
     return scoring.impact_points(row["stats"], row["role"])[0], scoring.minutes_detected(row["stats"])
 
 
-def _player(row, data, favorites=frozenset()):
+def _player(row, data, favorites=frozenset(), seasons=None):
     f = data["forms"].get(row["player_id"]) or scoring.form([])
     return {"player_id": row["player_id"], "name": row["name"], "team": row["team"], "team_name": row["team_name"],
             "number": row["number"], "position": row["position"], "group": scoring.position_group(row["position"]),
-            "favorite": row["player_id"] in favorites, "form": f, "recommendation": scoring.recommendation(f)}
+            "headshot": row["headshot"], "favorite": row["player_id"] in favorites, "form": f,
+            "recommendation": scoring.recommendation(f), "season": (seasons or {}).get(row["player_id"])}
+
+
+def _seasons(con):
+    """{player_id: this season's official NHL totals}."""
+    return {r["player_id"]: json.loads(r["data"]) for r in con.execute("SELECT player_id, data FROM nhl_season_stats")}
+
+
+def _standings(con):
+    return {r["team"]: json.loads(r["data"]) for r in con.execute("SELECT team, data FROM nhl_standings")}
 
 
 def _favorites(con):
@@ -70,13 +83,15 @@ def _get_player_row(con, player_id):
 # --- players and teams ---
 
 def teams(con, params, body):
-    return [dict(r) for r in con.execute(
+    standings = _standings(con)
+    return [{**dict(r), "standing": standings.get(r["team"])} for r in con.execute(
         """SELECT team, team_name, COUNT(*) AS players FROM players WHERE team IS NOT NULL
            GROUP BY team, team_name ORDER BY team_name""")]
 
 
 def players(con, params, body):
-    """Players filtered by ?team=, ?q= (name), ?group= (F/D/G), ?favorites=1, ?rated=1; ?sort=form|name|number."""
+    """Players filtered by ?team=, ?q= (name), ?group= (F/D/G), ?favorites=1, ?rated=1;
+    ?sort=form|points|name|number (points: this season's NHL points, goalies by wins)."""
     sql, args = "SELECT * FROM players WHERE 1", []
     if params.get("team"):
         sql += " AND team = ?"
@@ -86,8 +101,8 @@ def players(con, params, body):
         args.append(f"%{params['q']}%")
     if params.get("favorites") == "1":
         sql += " AND player_id IN (SELECT player_id FROM favorites)"
-    data, favs = scored(con), _favorites(con)
-    out = [_player(r, data, favs) for r in con.execute(sql + " ORDER BY name", args)]
+    data, favs, seasons = scored(con), _favorites(con), _seasons(con)
+    out = [_player(r, data, favs, seasons) for r in con.execute(sql + " ORDER BY name", args)]
     if params.get("group"):
         out = [p for p in out if p["group"] == params["group"].upper()]
     if params.get("rated") == "1":
@@ -95,16 +110,35 @@ def players(con, params, body):
     sort = params.get("sort", "name")
     if sort == "form":
         out.sort(key=lambda p: (p["form"]["form"] is None, -(p["form"]["form"] or 0)))
+    elif sort == "points":
+        out.sort(key=lambda p: (p["season"] is None, -_season_points(p["season"])))
     elif sort == "number":
         out.sort(key=lambda p: (p["group"] != "F", p["group"] == "G", p["number"] or 0))
     limit = int(params.get("limit", 0) or 0)
     return out[:limit] if limit else out
 
 
+def _season_points(season):
+    if not season:
+        return 0
+    return (season.get("wins") or 0) if season.get("role") == "goalie" else (season.get("points") or 0)
+
+
+def player_nhl(con, params, body, player_id):
+    """The player's NHL page: last 5 games, draft, career. Fetched from the NHL on first view, then cached."""
+    _get_player_row(con, player_id)
+    try:
+        return nhl.player_landing(con, player_id)
+    except nhl.NhlError as e:
+        raise ApiError(502, f"Couldn't reach the NHL's API: {e}")
+
+
 def player(con, params, body, player_id):
     row = _get_player_row(con, player_id)
     data = scored(con)
-    p = _player(row, data, _favorites(con))
+    p = _player(row, data, _favorites(con), _seasons(con))
+    p["bio"] = {k: row[k] for k in db.PLAYER_BIO}
+    p["standing"] = _standings(con).get(row["team"])
     p["games"] = data["by_player"].get(player_id, [])
     p["playlists"] = [dict(r) for r in con.execute(
         """SELECT l.id, l.name, l.is_pool FROM playlists l JOIN playlist_players pp ON pp.playlist_id = l.id
@@ -136,9 +170,15 @@ def game(con, params, body, game_id):
         raise ApiError(404, f"No game {game_id}")
     names = {r["player_id"]: dict(r) for r in con.execute("SELECT player_id, name, number, position FROM players")}
     entries = sorted(scored(con)["by_game"].get(game_id, []), key=lambda e: -e["score"])
-    return {**dict(row), "is_demo": bool(row["is_demo"]),
+    official, lines = None, {}
+    if row["nhl_game_id"]:
+        box = con.execute("SELECT data FROM nhl_boxscores WHERE nhl_game_id = ?", (row["nhl_game_id"],)).fetchone()
+        official = json.loads(box["data"]) if box else None
+        lines = {r["player_id"]: json.loads(r["data"]) for r in con.execute(
+            "SELECT player_id, data FROM nhl_boxscore_lines WHERE nhl_game_id = ?", (row["nhl_game_id"],))}
+    return {**dict(row), "is_demo": bool(row["is_demo"]), "official": official,
             "players": [{**{k: v for k, v in e.items() if k != "stats"}, **names.get(e["player_id"], {}),
-                         "stats": e["stats"]} for e in entries]}
+                         "stats": e["stats"], "official": lines.get(e["player_id"])} for e in entries]}
 
 
 def delete_game(con, params, body, game_id):
@@ -236,11 +276,11 @@ def _members(con, playlist_id):
 
 def playlist(con, params, body, playlist_id):
     row = _get_playlist_row(con, playlist_id)
-    data, favs = scored(con), _favorites(con)
+    data, favs, seasons = scored(con), _favorites(con), _seasons(con)
     ids = _members(con, playlist_id)
     rows = {r["player_id"]: r for r in con.execute(
         f"SELECT * FROM players WHERE player_id IN ({', '.join('?' * len(ids))})", ids)} if ids else {}
-    members = [_player(rows[i], data, favs) for i in ids if i in rows]
+    members = [_player(rows[i], data, favs, seasons) for i in ids if i in rows]
     members.sort(key=lambda p: ("FDG".index(p["group"]), p["form"]["form"] is None, -(p["form"]["form"] or 0)))
     return {**_playlist_out(row), "players": members}
 
@@ -297,9 +337,42 @@ def _mean(values):
     return round(mean(values), 1) if values else None
 
 
-def _setup_stats(data, members, league_medians):
+def _season_totals(members):
+    """Your players' official NHL totals this season, or None before the stats are synced."""
+    seasons = [p["season"] for p in members if p["season"]]
+    if not seasons:
+        return None
+    skaters = [x for x in seasons if x.get("role") != "goalie"]
+    goalies = [x for x in seasons if x.get("role") == "goalie"]
+    total = lambda rows, k: sum(x.get(k) or 0 for x in rows)  # noqa: E731
+    games, points = total(skaters, "games"), total(skaters, "points")
+    return {"players": len(seasons), "skaters": len(skaters), "goalies": len(goalies), "games": games,
+            "goals": total(skaters, "goals"), "assists": total(skaters, "assists"), "points": points,
+            "points_per_game": round(points / games, 2) if games else None,
+            "goalie_wins": total(goalies, "wins"), "shutouts": total(goalies, "shutouts")}
+
+
+def _week_schedule(con, today=None):
+    """{team: [their games in the next 7 days]} from the synced schedule, or None if there is none."""
+    start = today or date.today()
+    end = start + timedelta(days=nhl.SCHEDULE_DAYS)
+    rows = con.execute("SELECT data FROM nhl_schedule WHERE date >= ? AND date < ? ORDER BY date",
+                       (start.isoformat(), end.isoformat())).fetchall()
+    if not rows:
+        return None
+    out = {}
+    for r in rows:
+        g = json.loads(r["data"])
+        for team, opponent, home in ((g["away"], g["home"], False), (g["home"], g["away"], True)):
+            out.setdefault(team, []).append({"date": g["date"], "opponent": opponent, "home": home,
+                                             "start_utc": g.get("start_utc")})
+    return {"start": start.isoformat(), "end": (end - timedelta(days=1)).isoformat(), "teams": out}
+
+
+def _setup_stats(data, members, league_medians, schedule=None):
     """Statistics for a group of your players: form, calls, weekly scores, position groups, their
-    recent games, the best of them and the ones needing attention."""
+    recent games, the best of them and the ones needing attention; with NHL data synced, their
+    official season totals and their games this week."""
     rated = [p for p in members if p["form"]["games"]]
     games = [g for p in members for g in data["by_player"].get(p["player_id"], [])]
     names = {p["player_id"]: p["name"] for p in members}
@@ -329,10 +402,22 @@ def _setup_stats(data, members, league_medians):
                     "score": _mean(g["score"] for g in gs),
                     "players": [{"player_id": g["player_id"], "name": names[g["player_id"]], "score": g["score"]}
                                 for g in sorted(gs, key=lambda g: -g["score"])]} for gs in recent],
+        "season": _season_totals(members),
+        "week": _week_games(members, schedule),
         "top": by_form[:OVERVIEW_PLAYERS],
         "attention": sorted((p for p in rated if p["recommendation"]["action"] in ("trade", "watch")),
                             key=lambda p: p["form"]["form"])[:OVERVIEW_PLAYERS],
     }
+
+
+def _week_games(members, schedule):
+    if not schedule:
+        return None
+    players = [{"player_id": p["player_id"], "name": p["name"], "team": p["team"], "position": p["position"],
+                "games": schedule["teams"].get(p["team"], [])} for p in members]
+    players.sort(key=lambda p: (-len(p["games"]), p["name"]))
+    return {"start": schedule["start"], "end": schedule["end"], "games": sum(len(p["games"]) for p in players),
+            "players": players}
 
 
 def dashboard(con, params, body):
@@ -343,15 +428,17 @@ def dashboard(con, params, body):
         chosen = int(params["playlist"]) if params.get("playlist") else (lists[0]["id"] if lists else None)
     except ValueError:
         raise ApiError(400, "playlist must be a playlist id")
-    data, favs = scored(con), _favorites(con)
-    everyone = [_player(r, data, favs) for r in con.execute("SELECT * FROM players")]
+    data, favs, seasons = scored(con), _favorites(con), _seasons(con)
+    schedule = _week_schedule(con)
+    everyone = [_player(r, data, favs, seasons) for r in con.execute("SELECT * FROM players")]
     league_medians = {}
     for key in scoring.GROUP_NAMES:
         forms = [p["form"]["form"] for p in everyone if p["group"] == key and p["form"]["games"]]
         league_medians[key] = round(median(forms), 1) if forms else None
 
     out = {"playlists": lists, "playlist": None, "assessment": None,
-           "favorites": _setup_stats(data, [p for p in everyone if p["favorite"]], league_medians),
+           "favorites": _setup_stats(data, [p for p in everyone if p["favorite"]], league_medians, schedule),
+           "nhl": nhl_status(con, {}, {}),
            "demo_games": con.execute("SELECT COUNT(*) FROM games WHERE is_demo").fetchone()[0],
            "thresholds": {"trade_below": scoring.TRADE_BELOW, "watch_below": scoring.WATCH_BELOW,
                           "core_above": scoring.CORE_ABOVE, "min_games": scoring.MIN_GAMES}}
@@ -359,7 +446,7 @@ def dashboard(con, params, body):
         row = _get_playlist_row(con, chosen)
         ids = set(_members(con, chosen))
         members = [p for p in everyone if p["player_id"] in ids]
-        out["playlist"] = {**_playlist_out(row), **_setup_stats(data, members, league_medians)}
+        out["playlist"] = {**_playlist_out(row), **_setup_stats(data, members, league_medians, schedule)}
         if row["is_pool"]:
             out["assessment"] = assessment(con, {}, {}, chosen)
             best = {u["out"]["player_id"]: u["targets"][0] for u in out["assessment"]["upgrades"]}
@@ -368,11 +455,33 @@ def dashboard(con, params, body):
     return out
 
 
+# --- NHL data ---
+
+def nhl_status(con, params, body):
+    """When each kind of NHL data was last refreshed, and how much of it there is."""
+    synced = {r["kind"]: {"at": r["at"], "ok": bool(r["ok"]), "detail": r["detail"]} for r in con.execute("SELECT * FROM nhl_sync")}
+    counts = con.execute("""SELECT (SELECT COUNT(*) FROM nhl_standings) AS standings,
+                                   (SELECT COUNT(*) FROM nhl_season_stats) AS stats,
+                                   (SELECT COUNT(*) FROM nhl_schedule) AS schedule,
+                                   (SELECT COUNT(*) FROM nhl_boxscores) AS boxscores""").fetchone()
+    return {"kinds": [{"kind": k, **synced.get(k, {"at": None, "ok": None, "detail": None})} for k in nhl.KINDS],
+            "counts": dict(counts), "season": nhl.current_season()}
+
+
+def nhl_sync(con, params, body):
+    """Refresh NHL data now: body {"only": [kinds]} for some of it. Takes a while (one request per team)."""
+    only = body.get("only")
+    if only is not None and (not isinstance(only, list) or set(only) - set(nhl.KINDS)):
+        raise ApiError(400, f"only must be a list of: {', '.join(nhl.KINDS)}")
+    return {"report": nhl.sync(con, only), **nhl_status(con, {}, {})}
+
+
 ROUTES = [
     ("GET", r"/api/dashboard", dashboard),
     ("GET", r"/api/teams", teams),
     ("GET", r"/api/players", players),
     ("GET", r"/api/players/(\d+)", player),
+    ("GET", r"/api/players/(\d+)/nhl", player_nhl),
     ("POST", r"/api/players/(\d+)/favorite", add_favorite),
     ("DELETE", r"/api/players/(\d+)/favorite", remove_favorite),
     ("GET", r"/api/games", games),
@@ -386,4 +495,6 @@ ROUTES = [
     ("POST", r"/api/playlists/(\d+)/players", add_to_playlist),
     ("DELETE", r"/api/playlists/(\d+)/players/(\d+)", remove_from_playlist),
     ("GET", r"/api/playlists/(\d+)/assessment", assessment),
+    ("GET", r"/api/nhl/status", nhl_status),
+    ("POST", r"/api/nhl/sync", nhl_sync),
 ]

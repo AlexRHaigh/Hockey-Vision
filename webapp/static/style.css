@@ -138,6 +138,11 @@ main { max-width: 1240px; margin: 0 auto; padding: 24px; outline: none; }
 .team-list .count { margin-left: auto; font-size: 0.75rem; color: var(--text-3); }
 .logo { width: 22px; height: 22px; object-fit: contain; flex: none; }
 .logo-lg { width: 64px; height: 64px; }
+.headshot { width: 72px; height: 72px; border-radius: 50%; object-fit: cover; background: var(--surface-2); flex: none; }
+.stat-grid { display: grid; grid-template-columns: repeat(auto-fit, minmax(64px, 1fr)); gap: 8px; }
+.stat { display: flex; flex-direction: column; align-items: center; padding: 8px 4px; border-radius: 8px; background: var(--surface-2); }
+.stat b { font-size: 1.25rem; font-variant-numeric: tabular-nums; }
+.stat span { font-size: 0.72rem; color: var(--text-2); }
 .logo-text { display: inline-grid; place-items: center; border-radius: 6px; background: var(--surface-2); color: var(--text-2); font-size: 0.6rem; font-weight: 700; letter-spacing: 0.02em; }
 .logo-lg.logo-text { font-size: 1.1rem; border-radius: 12px; }
 

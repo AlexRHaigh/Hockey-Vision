@@ -128,6 +128,47 @@ function logo(team, cls = "logo") {
   return img;
 }
 
+// A player's NHL headshot, or their team's logo when there is none or it won't load.
+function headshot(p, cls = "headshot") {
+  if (!p.headshot) return logo(p.team, `logo ${cls}`);
+  const img = h("img", { class: cls, alt: "", loading: "lazy", src: p.headshot });
+  img.addEventListener("error", () => img.replaceWith(logo(p.team, `logo ${cls}`)));
+  return img;
+}
+
+function toi(seconds) {
+  if (seconds === null || seconds === undefined) return "–";
+  const sec = Math.round(seconds);
+  return `${Math.floor(sec / 60)}:${String(sec % 60).padStart(2, "0")}`;
+}
+
+function age(birthDate) {
+  if (!birthDate) return null;
+  const b = new Date(birthDate + "T00:00:00"), now = new Date();
+  return now.getFullYear() - b.getFullYear() - (now < new Date(now.getFullYear(), b.getMonth(), b.getDate()) ? 1 : 0);
+}
+
+function ordinal(n) {
+  const s = ["th", "st", "nd", "rd"], v = n % 100;
+  return n + (s[(v - 20) % 10] || s[v] || s[0]);
+}
+
+function standingText(st) {
+  if (!st) return null;
+  return [`${st.wins}-${st.losses}-${st.ot_losses}`, `${st.points} pts`,
+    st.division_rank && st.division ? `${ordinal(st.division_rank)} ${st.division}` : null,
+    st.streak ? `streak ${st.streak}` : null, st.last10 ? `last 10 ${st.last10}` : null].filter(Boolean).join(" · ");
+}
+
+// This season's official NHL points (goalies: wins), for tables.
+function seasonCell(season) {
+  if (!season) return h("span", { class: "none", title: "No NHL stats yet: refresh NHL data on the Overview" }, "–");
+  if (season.role === "goalie") {
+    return h("span", { class: "num", title: `${season.games ?? 0} GP · ${season.wins ?? 0}-${season.losses ?? 0}-${season.ot_losses ?? 0} · SV% ${fmt(season.save_pct, 3)}` }, `${season.wins ?? 0} W`);
+  }
+  return h("span", { class: "num", title: `${season.games ?? 0} GP · ${season.goals ?? 0} G · ${season.assists ?? 0} A` }, season.points ?? 0);
+}
+
 function meter(value) {
   if (value === null || value === undefined) return h("span", { class: "none" }, "–");
   const bar = h("span", {});
@@ -168,7 +209,7 @@ function starButton(p, onChange) {
 function playerTable(players, opts = {}) {
   if (!players.length) return h("div", { class: "empty" }, opts.empty || "No players.");
   const full = !opts.compact;
-  const head = full ? ["", "#", "Player", "Pos", "Form", "Last game", "Trend", "GP", "Call"] : ["", "Player", "Pos", "Form", "Call"];
+  const head = full ? ["", "#", "Player", "Pos", "Form", "Last game", "Trend", "Games", "NHL pts", "Call"] : ["", "Player", "Pos", "Form", "NHL pts", "Call"];
   if (opts.remove) head.push("");
   const rows = players.map((p) => {
     const tr = h("tr", { class: "clickable", tabindex: "0", onclick: () => go(`#/player/${p.player_id}`),
@@ -179,7 +220,8 @@ function playerTable(players, opts = {}) {
       h("td", { title: p.position }, POS_SHORT[p.position] || p.position || ""),
       h("td", {}, meter(p.form.form)),
       full ? [h("td", { class: "r num" }, fmt(p.form.last)), h("td", { class: "r" }, trend(p.form.trend)),
-        h("td", { class: "r num" }, p.form.games)] : null,
+        h("td", { class: "r num", title: "Games analysed by Hockey-Vision" }, p.form.games)] : null,
+      h("td", { class: "r" }, seasonCell(p.season)),
       h("td", {}, pill(p.recommendation)));
     if (opts.remove) {
       tr.append(h("td", {}, h("button", { class: "btn small danger", type: "button",
@@ -188,7 +230,7 @@ function playerTable(players, opts = {}) {
     return tr;
   });
   return h("div", { class: "table-wrap" }, h("table", {},
-    h("thead", {}, h("tr", {}, head.map((t, i) => h("th", { class: full && [5, 6, 7].includes(i) ? "r" : null }, t)))),
+    h("thead", {}, h("tr", {}, head.map((t, i) => h("th", { class: (full ? [5, 6, 7, 8] : [4]).includes(i) ? "r" : null }, t)))),
     h("tbody", {}, rows)));
 }
 
@@ -310,7 +352,7 @@ async function pageHome(params) {
     }, "Create my pool");
     return [pageHead("Your overview", "Set up your pool and this page tracks how your players are doing, who to trade and whether to trade at all."),
       h("div", { class: "card" }, h("h2", { style: "margin-bottom:12px" }, "Set up your pool"), create),
-      favoritesCard(d.favorites), scoreHelp(d)];
+      favoritesCard(d.favorites), nhlDataCard(d.nhl), scoreHelp(d)];
   }
 
   const picker = h("select", { "aria-label": "Playlist to show" }, d.playlists.map((l) =>
@@ -333,7 +375,7 @@ async function pageHome(params) {
   if (!pl.size) {
     body.push(h("div", { class: "card empty" }, h("h2", {}, `${pl.name} has no players yet`),
       h("p", {}, h("a", { href: `#/playlist/${pl.id}` }, "Add players"), " to see their statistics here.")));
-    body.push(favoritesCard(d.favorites), scoreHelp(d));
+    body.push(favoritesCard(d.favorites), nhlDataCard(d.nhl), scoreHelp(d));
     return body;
   }
 
@@ -345,7 +387,10 @@ async function pageHome(params) {
     tile("Trend", pl.trend === null ? "–" : trend(pl.trend), "last 3 games vs before"),
     a ? tile("Trade urgency", `${a.urgency}`, "0 hold · 100 rebuild") : null,
     tile("Calls", `${c.keep} · ${c.watch} · ${c.trade}`, `keep · watch · trade${c.hold ? ` · ${c.hold} on hold` : ""}`),
-    tile("Players rated", `${pl.rated}/${pl.size}`, pl.rated < pl.size ? "the rest have no games yet" : "all have games")));
+    tile("Players rated", `${pl.rated}/${pl.size}`, pl.rated < pl.size ? "the rest have no games yet" : "all have games"),
+    pl.season ? tile("NHL points", pl.season.points, `${pl.season.goals} G · ${pl.season.assists} A${pl.season.points_per_game !== null ? ` · ${fmt(pl.season.points_per_game, 2)}/GP` : ""}`) : null,
+    pl.season && pl.season.goalies ? tile("Goalie wins", pl.season.goalie_wins, `${pl.season.shutouts} shutout${pl.season.shutouts === 1 ? "" : "s"}`) : null,
+    pl.week ? tile("Games this week", pl.week.games, `${pl.week.start.slice(5)} to ${pl.week.end.slice(5)}`) : null));
 
   body.push(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Your players by week")),
     pl.weekly.length ? barChart(pl.weekly.map((w) => ({
@@ -389,8 +434,62 @@ async function pageHome(params) {
         h("div", { class: "num r" }, h("b", {}, fmt(g.score)))))
         : h("p", { class: "muted" }, "No analysed games yet."))));
 
-  body.push(favoritesCard(d.favorites), scoreHelp(d));
+  if (pl.week) body.push(weekCard(pl.week));
+  body.push(favoritesCard(d.favorites), nhlDataCard(d.nhl), scoreHelp(d));
   return body;
+}
+
+function weekCard(week) {
+  const day = (iso) => new Date(iso + "T00:00:00").toLocaleDateString(undefined, { weekday: "short" });
+  const light = week.players.filter((p) => p.games.length <= 2);
+  return h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "This week's NHL games"),
+    h("span", { class: "small muted" }, `${week.start} to ${week.end}${light.length ? ` · ${light.length} of your players play twice or less` : ""}`)),
+    h("div", { class: "table-wrap" }, h("table", {},
+      h("thead", {}, h("tr", {}, h("th", {}, "Player"), h("th", {}, "Pos"), h("th", { class: "r" }, "Games"), h("th", {}, "Schedule"))),
+      h("tbody", {}, week.players.map((p) => h("tr", {},
+        h("td", { class: "name" }, h("a", { href: `#/player/${p.player_id}` }, p.name), h("small", {}, p.team)),
+        h("td", {}, POS_SHORT[p.position] || ""),
+        h("td", { class: "r num" }, h("b", {}, p.games.length)),
+        h("td", { class: "small" }, p.games.length ? p.games.map((g) => `${day(g.date)} ${g.home ? "vs" : "@"} ${g.opponent}`).join(" · ")
+          : h("span", { class: "muted" }, "No games"))))))));
+}
+
+function ago(iso) {
+  if (!iso) return "never";
+  const mins = Math.round((Date.now() - new Date(iso).getTime()) / 60000);
+  if (mins < 1) return "just now";
+  if (mins < 60) return `${mins} min ago`;
+  if (mins < 48 * 60) return `${Math.round(mins / 60)} h ago`;
+  return `${Math.round(mins / 1440)} days ago`;
+}
+
+const NHL_KINDS = { standings: "Standings", rosters: "Rosters & bios", stats: "Season stats", schedule: "This week's schedule", boxscores: "Box scores of imported games" };
+
+function nhlDataCard(status) {
+  const list = h("div", {});
+  const render = (st) => list.replaceChildren(h("div", { class: "table-wrap" }, h("table", {},
+    h("tbody", {}, st.kinds.map((k) => h("tr", {},
+      h("td", {}, NHL_KINDS[k.kind] || k.kind),
+      h("td", {}, k.ok === null ? h("span", { class: "muted" }, "not loaded yet")
+        : h("span", { class: `pill ${k.ok ? "keep" : "trade"}` }, icon(ICONS[k.ok ? "keep" : "trade"]), k.ok ? "OK" : "Failed")),
+      h("td", { class: "small muted", style: "white-space:normal" }, k.at ? `${ago(k.at)}: ${k.detail || ""}` : "")))))));
+  render(status);
+  const btn = h("button", { class: "btn primary", type: "button" }, "Refresh NHL data");
+  btn.addEventListener("click", async () => {
+    btn.disabled = true;
+    btn.textContent = "Refreshing… (about a minute)";
+    try {
+      const out = await api("POST", "/api/nhl/sync", {});
+      const failed = Object.entries(out.report).filter(([, r]) => !r.ok);
+      toast(failed.length ? `${failed.length} of ${Object.keys(out.report).length} NHL updates failed` : "NHL data refreshed");
+      if (failed.length) render(out); else route();
+    } catch (err) { toast(err.message); }
+    btn.disabled = false;
+    btn.textContent = "Refresh NHL data";
+  });
+  return h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "NHL data"),
+    h("span", { class: "small muted" }, `season ${status.season.slice(0, 4)}-${status.season.slice(6)} · from the NHL's public API`)),
+    list, h("div", { style: "margin-top:12px" }, btn));
 }
 
 function favoritesCard(f) {
@@ -431,6 +530,7 @@ async function pagePlayers(params) {
   const teamList = h("nav", { class: "card team-list", "aria-label": "Teams" }, teamBtns);
   const syncTeams = () => teamBtns.forEach((b) => b.classList.toggle("active", b.dataset.team === playersState.team));
   const title = h("h1", {});
+  const standing = h("p", { class: "muted" });
 
   const search = h("input", { type: "search", class: "grow", placeholder: "Search players…", value: playersState.q, "aria-label": "Search players" });
   let timer;
@@ -439,7 +539,8 @@ async function pagePlayers(params) {
     h("option", { value: "" }, "All positions"), Object.entries(GROUPS).map(([k, v]) => h("option", { value: k }, v)));
   group.value = playersState.group;
   const sort = h("select", { "aria-label": "Sort", onchange: (e) => { playersState.sort = e.target.value; load(); } },
-    h("option", { value: "name" }, "Sort: name"), h("option", { value: "form" }, "Sort: form"), h("option", { value: "number" }, "Sort: number"));
+    h("option", { value: "name" }, "Sort: name"), h("option", { value: "form" }, "Sort: form"), h("option", { value: "points" }, "Sort: NHL points"),
+    h("option", { value: "number" }, "Sort: number"));
   sort.value = playersState.sort;
   const rated = h("input", { type: "checkbox", onchange: (e) => { playersState.rated = e.target.checked; load(); } });
   rated.checked = playersState.rated;
@@ -453,15 +554,79 @@ async function pagePlayers(params) {
     const team = teams.find((t) => t.team === playersState.team);
     title.replaceChildren(team ? logo(team.team) : "", team ? ` ${team.team_name}` : "All players");
     title.style.display = "flex"; title.style.gap = "10px"; title.style.alignItems = "center";
+    standing.replaceChildren(team && team.standing ? standingText(team.standing) : "");
     list.replaceChildren(h("p", { class: "muted small" }, `${players.length} players`),
       playerTable(players, { empty: "No players match these filters." }));
     list.classList.remove("loading");
   }
   await load();
   return h("div", { class: "layout-side" }, teamList,
-    h("div", {}, h("div", { class: "page-head" }, title),
+    h("div", {}, h("div", { class: "page-head" }, h("div", {}, title, standing)),
       h("div", { class: "filters" }, search, group, sort, h("label", { class: "check" }, rated, "Rated only")),
       h("div", { class: "card" }, list)));
+}
+
+function bioLine(bio) {
+  if (!bio) return null;
+  const parts = [];
+  if (bio.shoots) parts.push(`${bio.shoots === "L" ? "Left" : bio.shoots === "R" ? "Right" : bio.shoots}-handed`);
+  if (bio.height_in) parts.push(`${Math.floor(bio.height_in / 12)}′${bio.height_in % 12}″`);
+  if (bio.weight_lb) parts.push(`${bio.weight_lb} lb`);
+  if (bio.birth_date) parts.push(`age ${age(bio.birth_date)}`);
+  if (bio.birth_place) parts.push(bio.birth_place);
+  return parts.length ? h("div", { class: "small muted" }, parts.join(" · ")) : null;
+}
+
+function statGrid(items) {
+  return h("div", { class: "stat-grid" }, items.map(([label, value]) =>
+    h("div", { class: "stat" }, h("b", {}, value ?? "–"), h("span", {}, label))));
+}
+
+function seasonStats(sz) {
+  return sz.role === "goalie"
+    ? [["GP", sz.games], ["W", sz.wins], ["L", sz.losses], ["OTL", sz.ot_losses], ["GAA", fmt(sz.gaa, 2)],
+       ["SV%", fmt(sz.save_pct, 3)], ["SO", sz.shutouts]]
+    : [["GP", sz.games], ["G", sz.goals], ["A", sz.assists], ["P", sz.points],
+       ["+/-", sz.plus_minus === null || sz.plus_minus === undefined ? null : (sz.plus_minus > 0 ? `+${sz.plus_minus}` : sz.plus_minus)],
+       ["PPP", sz.pp_points], ["SOG", sz.shots], ["TOI/GP", toi(sz.toi_per_game_s)]];
+}
+
+function seasonCard(p) {
+  const card = h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "NHL season")));
+  if (p.standing) card.append(h("p", { class: "small muted", style: "margin:-6px 0 12px" }, `${p.team}: ${standingText(p.standing)}`));
+  card.append(p.season ? statGrid(seasonStats(p.season))
+    : h("p", { class: "muted" }, "No official stats yet. Refresh NHL data on the Overview to load this season's totals."));
+  return card;
+}
+
+// The player's NHL page (last 5 games, draft, career), loaded after the rest of the page.
+function nhlPageCard(p) {
+  const body = h("div", {}, h("p", { class: "muted" }, "Loading from the NHL…"));
+  const card = h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Last 5 NHL games")), body);
+  get(`/api/players/${p.player_id}/nhl`).then((page) => {
+    const goalie = p.position === "Goalie";
+    const rows = page.last5.map((g) => h("tr", {},
+      h("td", { class: "num" }, (g.date || "").slice(5)), h("td", {}, `${g.home ? "vs" : "@"} ${g.opponent || ""}`),
+      goalie
+        ? [h("td", {}, g.decision || "–"), h("td", { class: "r num" }, g.goals_against ?? "–"), h("td", { class: "r num" }, fmt(g.save_pct, 3))]
+        : [h("td", { class: "r num" }, g.goals ?? 0), h("td", { class: "r num" }, g.assists ?? 0), h("td", { class: "r num" }, g.points ?? 0),
+           h("td", { class: "r num" }, g.plus_minus ?? 0), h("td", { class: "r num" }, g.shots ?? 0)],
+      h("td", { class: "r num" }, g.toi || "–")));
+    const head = ["Date", "Opp", ...(goalie ? ["Dec", "GA", "SV%"] : ["G", "A", "P", "+/-", "SOG"]), "TOI"];
+    const extra = [];
+    const d = page.draft;
+    if (d && d.year) extra.push(`Drafted ${d.year} by ${d.team}, round ${d.round}, #${d.overall} overall`);
+    const c = page.career;
+    if (c && c.games) extra.push(goalie ? `Career: ${c.games} GP, ${c.wins ?? 0} W, ${fmt(c.save_pct, 3)} SV%` : `Career: ${c.games} GP, ${c.goals ?? 0} G, ${c.assists ?? 0} A, ${c.points ?? 0} P`);
+    body.replaceChildren(
+      rows.length ? h("div", { class: "table-wrap" }, h("table", {},
+        h("thead", {}, h("tr", {}, head.map((t, i) => h("th", { class: i > 1 ? "r" : null }, t)))), h("tbody", {}, rows)))
+        : h("p", { class: "muted" }, "No NHL games this season yet."),
+      extra.length ? h("p", { class: "small muted" }, extra.join(" · ")) : null);
+  }).catch((err) => {
+    body.replaceChildren(h("p", { class: "muted" }, `Couldn't load this player's NHL page: ${err.message}`));
+  });
+  return card;
 }
 
 async function pagePlayer(id) {
@@ -493,9 +658,10 @@ async function pagePlayer(id) {
   const f = p.form;
   const body = [
     h("div", { class: "card" }, h("div", { class: "player-head" },
-      logo(p.team, "logo logo-lg"),
+      headshot(p, "headshot logo-lg"),
       h("div", {}, h("h1", {}, p.name),
-        h("div", { class: "muted" }, `${p.position || ""} · `, h("a", { href: `#/players?team=${p.team}` }, p.team_name || p.team || "No team"))),
+        h("div", { class: "muted" }, `${p.position || ""} · `, h("a", { href: `#/players?team=${p.team}` }, p.team_name || p.team || "No team")),
+        bioLine(p.bio)),
       h("span", { class: "jersey" }, p.number !== null ? `#${p.number}` : ""),
       h("div", { class: "actions" }, starButton(p), addSelect))),
   ];
@@ -504,11 +670,12 @@ async function pagePlayer(id) {
       p.playlists.map((l, i) => [i ? ", " : "", h("a", { href: `#/playlist/${l.id}` }, l.name)])));
   }
   body.push(h("div", { class: "tiles", style: "margin-top:16px" },
-    tile("Form", fmt(f.form), "last 5 games, weighted"), tile("Season average", fmt(f.season)),
+    tile("Form", fmt(f.form), "last 5 games, weighted"), tile("Average score", fmt(f.season), "every analysed game"),
     tile("Last game", fmt(f.last)), tile("Trend", f.trend === null ? "–" : trend(f.trend), "last 3 vs before"),
     tile("Games", f.games)));
   body.push(h("div", { class: "card rec-card" }, pill(p.recommendation),
     h("div", {}, h("b", {}, "Pool call"), h("p", {}, p.recommendation.reason))));
+  body.push(h("div", { class: "grid-2" }, seasonCard(p), nhlPageCard(p)));
   if (!p.games.length) {
     body.push(h("div", { class: "card empty" }, "No analysed games for this player yet."));
     return body;
@@ -549,6 +716,15 @@ async function pageGames() {
         h("td", {}, g.top ? [g.top.name, " ", h("span", { class: "muted num" }, fmt(g.top.score))] : "–"))))))];
 }
 
+function officialCells(line) {
+  if (!line) return [h("td", { class: "r none" }, "–"), h("td", { class: "r none" }, "–"), h("td", { class: "r none" }, "–")];
+  if (line.role === "goalie") {
+    return [h("td", { class: "r num", colspan: "2", title: "Saves / shots against" }, `${line.saves ?? "–"}/${line.shots_against ?? "–"} SV`),
+      h("td", { class: "r num" }, toi(line.toi_s))];
+  }
+  return [h("td", { class: "r num" }, line.goals ?? 0), h("td", { class: "r num" }, line.assists ?? 0), h("td", { class: "r num" }, toi(line.toi_s))];
+}
+
 async function pageGame(id) {
   const g = await get(`/api/games/${id}`);
   const teams = [g.away, g.home].filter(Boolean);
@@ -559,16 +735,22 @@ async function pageGame(id) {
     toast("Game removed");
     go("#/games");
   } }, "Remove game");
-  return [pageHead(g.label, `${g.date}${g.nhl_game_id ? ` · NHL game ${g.nhl_game_id}` : ""}${g.is_demo ? " · demo game (made up)" : ""}`, del),
+  const o = g.official;
+  const final = o && o.away_score !== null && o.away_score !== undefined
+    ? ` · official: ${o.away} ${o.away_score}, ${o.home} ${o.home_score}${o.state === "FINAL" || o.state === "OFF" ? " (final)" : ""}` : "";
+  const hasLines = g.players.some((p) => p.official);
+  return [pageHead(g.label, `${g.date}${g.nhl_game_id ? ` · NHL game ${g.nhl_game_id}` : ""}${final}${g.is_demo ? " · demo game (made up)" : ""}`, del),
     h("div", { class: "grid-2" }, byTeam.map(([team, players]) => h("div", { class: "card" },
       h("div", { class: "card-head" }, h("h2", { style: "display:flex;gap:8px;align-items:center" }, logo(team), team || "Players"),
         h("span", { class: "muted small" }, `${players.length} players`)),
       h("div", { class: "table-wrap" }, h("table", {},
-        h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Player"), h("th", {}, "Pos"), h("th", {}, "Score"), h("th", { class: "r" }, "Min seen"))),
+        h("thead", {}, h("tr", {}, h("th", {}, "#"), h("th", {}, "Player"), h("th", {}, "Pos"), h("th", {}, "Score"), h("th", { class: "r" }, "Min seen"),
+          hasLines ? [h("th", { class: "r" }, "G"), h("th", { class: "r" }, "A"), h("th", { class: "r" }, "TOI")] : null)),
         h("tbody", {}, players.map((p) => h("tr", { class: "clickable", onclick: () => go(`#/player/${p.player_id}`) },
           h("td", { class: "num muted" }, p.number ?? ""), h("td", { class: "name" }, p.name),
           h("td", {}, POS_SHORT[p.position] || ""), h("td", {}, meter(p.score)),
-          h("td", { class: "r num" }, fmt(p.minutes, 1)))))))))) ];
+          h("td", { class: "r num" }, fmt(p.minutes, 1)),
+          hasLines ? officialCells(p.official) : null)))))))) ];
 }
 
 async function pageFavorites() {
