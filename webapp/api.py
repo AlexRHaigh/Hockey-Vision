@@ -56,7 +56,7 @@ def _player(row, data, favorites=frozenset(), seasons=None):
     f = data["forms"].get(row["player_id"]) or scoring.form([])
     return {"player_id": row["player_id"], "name": row["name"], "team": row["team"], "team_name": row["team_name"],
             "number": row["number"], "position": row["position"], "group": scoring.position_group(row["position"]),
-            "headshot": row["headshot"], "favorite": row["player_id"] in favorites, "form": f,
+            "headshot": row["headshot"], "on_roster": row["on_roster"], "favorite": row["player_id"] in favorites, "form": f,
             "recommendation": scoring.recommendation(f), "season": (seasons or {}).get(row["player_id"])}
 
 
@@ -85,7 +85,8 @@ def _get_player_row(con, player_id):
 def teams(con, params, body):
     standings = _standings(con)
     return [{**dict(r), "standing": standings.get(r["team"])} for r in con.execute(
-        """SELECT team, team_name, COUNT(*) AS players FROM players WHERE team IS NOT NULL
+        """SELECT team, team_name, COUNT(*) AS players FROM players
+           WHERE team IS NOT NULL AND COALESCE(on_roster, 1) = 1
            GROUP BY team, team_name ORDER BY team_name""")]
 
 
@@ -93,8 +94,8 @@ def players(con, params, body):
     """Players filtered by ?team=, ?q= (name), ?group= (F/D/G), ?favorites=1, ?rated=1;
     ?sort=form|points|name|number (points: this season's NHL points, goalies by wins)."""
     sql, args = "SELECT * FROM players WHERE 1", []
-    if params.get("team"):
-        sql += " AND team = ?"
+    if params.get("team"):  # a team's current roster; searching all teams also finds players off one
+        sql += " AND team = ? AND COALESCE(on_roster, 1) = 1"
         args.append(params["team"].upper())
     if params.get("q"):
         sql += " AND name LIKE ?"
@@ -314,7 +315,7 @@ def assessment(con, params, body, playlist_id):
         p = _player(r, data)
         if r["player_id"] in members:
             pool.append(p)
-        elif p["form"]["games"]:
+        elif p["form"]["games"] and r["on_roster"] != 0:  # no upgrades to players off every roster
             others.append(p)
     result = scoring.assess_pool(pool, others, {"F": row["slots_f"], "D": row["slots_d"], "G": row["slots_g"]})
     return {"playlist_id": playlist_id, **result}

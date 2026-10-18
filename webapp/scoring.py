@@ -179,7 +179,8 @@ def assess_pool(pool, others, slots):
     """Assess a pool.
 
     `pool` and `others` are player dicts with "player_id", "name", "team", "position", "form" (a
-    form() summary) and "recommendation"; `others` are the players outside the pool. `slots` is
+    form() summary), "recommendation" and optionally "on_roster" (0 when on no NHL roster); `others`
+    are the players outside the pool that could be traded for. `slots` is
     {"F": n, "D": n, "G": n}, how many of each the pool's league rosters.
     """
     rated = [p for p in pool if p["form"]["games"]]
@@ -235,6 +236,10 @@ def assess_pool(pool, others, slots):
         urgency += 6 * sum(d["gap"] for d in gaps)
         reasons.append("Roster gaps: " + ", ".join(f"{d['gap']} {GROUP_UNITS[d['group']][d['gap'] != 1]}" for d in gaps)
                        + " short.")
+    off_roster = [p for p in pool if p.get("on_roster") == 0]
+    if off_roster:
+        urgency += 8 * len(off_roster)
+        reasons.append(f"Not on an NHL roster (sent down, waived or released): {', '.join(p['name'] for p in off_roster[:4])}.")
     unrated = len(pool) - len(rated)
     if unrated:
         reasons.append(f"{unrated} player{'s' * (unrated != 1)} with no analysed games yet.")

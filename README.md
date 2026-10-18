@@ -136,8 +136,10 @@ python -m webapp.demo                         # or: 300 made-up demo games to tr
 - **NHL data**: official, up-to-date information from the NHL's public API (documented at
   [gitlab.com/dword4/nhlapi](https://gitlab.com/dword4/nhlapi), `new-api.md`), refreshed with
   `python -m webapp.nhl sync` or the *Refresh NHL data* button on the overview:
-  standings, current rosters (trades and call-ups move players; headshots, handedness, height,
-  weight, birth date and place), every player's season totals (GP, G, A, P, +/-, PIM, PPP, SOG,
+  standings, current rosters (trades and call-ups move players; players on no roster, e.g. sent
+  down or waived, are marked *Off roster*, left out of team lists and upgrade suggestions, and
+  flagged in pool assessments; headshots, handedness, height, weight, birth date and place), every
+  player's season totals (GP, G, A, P, +/-, PIM, PPP, SOG,
   TOI/GP; goalies W, L, OTL, GAA, SV%, SO) and this week's schedule. Player pages also fetch the
   player's last 5 games, draft and career totals when opened, cached for 6 hours. Imported games
   with an NHL game id (`webapp.ingest --game-id`, or `python -m webapp.nhl boxscore <id>`) get the

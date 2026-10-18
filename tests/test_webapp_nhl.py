@@ -182,6 +182,11 @@ class SyncTests(unittest.TestCase):
         player = lambda pid: self.con.execute("SELECT * FROM players WHERE player_id = ?", (pid,)).fetchone()  # noqa: E731
         self.assertEqual((player(4)["team"], player(4)["team_name"], player(4)["as_of"]), ("SJS", "San Jose Sharks", "2026-10-18"))
         self.assertEqual((player(1)["shoots"], player(1)["birth_place"]), ("L", "Vancouver, BC, CAN"))
+        # Montembeault (6) is on no roster the API returned: kept, but off the roster and out of MTL's list.
+        self.assertEqual([player(pid)["on_roster"] for pid in (1, 4, 5, 6)], [1, 1, 1, 0])
+        self.assertIn("1 no longer on a roster", report["rosters"]["detail"])
+        self.assertNotIn(6, [p["player_id"] for p in api.players(self.con, {"team": "MTL"}, {})])
+        self.assertIn(6, [p["player_id"] for p in api.players(self.con, {"q": "Montembeault"}, {})])
         self.assertEqual(self.con.execute("SELECT COUNT(*) FROM nhl_season_stats").fetchone()[0], 3)  # 999 isn't ours
         # Only this week's games are kept from the schedule.
         self.assertEqual([r[0] for r in self.con.execute("SELECT date FROM nhl_schedule ORDER BY date")],

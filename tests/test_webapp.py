@@ -115,6 +115,12 @@ class ScoringTests(unittest.TestCase):
         self.assertNotIn(30, targets)  # a defenseman is no upgrade for a centre
         self.assertEqual([d["gap"] for d in a["depth"]], [0, 1, 0])
 
+    def test_players_off_every_roster_are_called_out(self):
+        pool = [self.player(1, "Center", [60] * 5), {**self.player(2, "Center", [60] * 5), "on_roster": 0}]
+        a = scoring.assess_pool(pool, [], {"F": 2, "D": 0, "G": 0})
+        self.assertTrue(any("Not on an NHL roster: P2" in r or "released): P2" in r for r in a["reasons"]), a["reasons"])
+        self.assertGreaterEqual(a["urgency"], 8)
+
     def test_empty_pool(self):
         self.assertEqual(scoring.assess_pool([], [], {"F": 1})["verdict"], "empty")
 

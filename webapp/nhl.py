@@ -202,7 +202,7 @@ def parse_boxscore(data):
 
 LANDING_SEASON = {"gamesPlayed": "games", "goals": "goals", "assists": "assists", "points": "points",
                   "plusMinus": "plus_minus", "pim": "pim", "shots": "shots", "powerPlayGoals": "pp_goals",
-                  "wins": "wins", "losses": "losses", "otLosses": "ot_losses", "goalsAgainstAvg": "gaa",
+                  "powerPlayPoints": "pp_points", "wins": "wins", "losses": "losses", "otLosses": "ot_losses", "goalsAgainstAvg": "gaa",
                   "savePctg": "save_pct", "shutouts": "shutouts"}
 LANDING_GAME = {"gameId": "nhl_game_id", "gameDate": "date", "opponentAbbrev": "opponent", "teamAbbrev": "team",
                 "goals": "goals", "assists": "assists", "points": "points", "plusMinus": "plus_minus", "pim": "pim",
@@ -250,17 +250,19 @@ def sync_standings(con):
 
 
 def sync_rosters(con, today=None):
-    """Every team's current roster: moves traded players, adds call-ups, fills in bios. Teams come
-    from the standings (or the database's players when there are none)."""
+    """Every team's current roster: moves traded players, adds call-ups, fills in bios, and marks
+    the players of the fetched teams who are on none of the rosters (sent down, waived, released) as
+    off the roster. Teams come from the standings (or the database's players when there are none)."""
     teams = {r["team"]: json.loads(r["data"]).get("team_name") for r in con.execute("SELECT * FROM nhl_standings")}
     if not teams:
         teams = {r["team"]: r["team_name"] for r in con.execute(
             "SELECT DISTINCT team, team_name FROM players WHERE team IS NOT NULL")}
     as_of = (today or Date.today()).isoformat()
-    rows, failed = [], []
+    rows, failed, fetched = [], [], set()
     for team, team_name in sorted(teams.items()):
         try:
             rows += [{**r, "team_name": team_name, "as_of": as_of} for r in parse_roster(team, _fetch(f"{API_WEB}/roster/{team}/current"))]
+            fetched.add(team)
         except NhlError as e:
             failed.append(f"{team} ({e})")
     if not rows:
@@ -276,7 +278,13 @@ def sync_rosters(con, today=None):
                    as_of = excluded.as_of, headshot = excluded.headshot, shoots = excluded.shoots,
                    height_in = excluded.height_in, weight_lb = excluded.weight_lb,
                    birth_date = excluded.birth_date, birth_place = excluded.birth_place""", rows)
-    return f"{len(rows)} players on {len(teams) - len(failed)} teams" + (f"; failed: {', '.join(failed)}" if failed else "")
+        on = {r["player_id"] for r in rows}
+        con.executemany("UPDATE players SET on_roster = 1 WHERE player_id = ?", [(pid,) for pid in on])
+        off = [r[0] for r in con.execute(f"SELECT player_id FROM players WHERE team IN ({', '.join('?' * len(fetched))})",
+                                         sorted(fetched)) if r[0] not in on]
+        con.executemany("UPDATE players SET on_roster = 0 WHERE player_id = ?", [(pid,) for pid in off])
+    return (f"{len(rows)} players on {len(fetched)} teams, {len(off)} no longer on a roster"
+            + (f"; failed: {', '.join(failed)}" if failed else ""))
 
 
 def sync_stats(con, today=None):

@@ -10,7 +10,8 @@ export_data.py outputs with each player's stats, favourites and playlists.
 
 From the NHL's API (nhl.py), refreshed by `python -m webapp.nhl sync`:
 
-    players          also each player's headshot and bio, from the current rosters
+    players          also each player's headshot and bio, from the current rosters, and on_roster:
+                     1 on a current NHL roster, 0 not (sent down, waived), NULL not checked yet
     nhl_standings    one row per team: record, points, streak, division rank
     nhl_season_stats one row per player: this season's official totals
     nhl_schedule     one row per scheduled NHL game
@@ -134,6 +135,7 @@ def now():
 # Player bio columns from the NHL's rosters, added to databases made before them.
 PLAYER_BIO = {"headshot": "TEXT", "shoots": "TEXT", "height_in": "INTEGER", "weight_lb": "INTEGER",
               "birth_date": "TEXT", "birth_place": "TEXT"}
+PLAYER_COLUMNS = {**PLAYER_BIO, "on_roster": "INTEGER"}
 
 
 def connect(path=DEFAULT_DB):
@@ -142,7 +144,7 @@ def connect(path=DEFAULT_DB):
     con.execute("PRAGMA foreign_keys = ON")
     con.executescript(SCHEMA)
     have = {r["name"] for r in con.execute("PRAGMA table_info(players)")}
-    for column, kind in PLAYER_BIO.items():
+    for column, kind in PLAYER_COLUMNS.items():
         if column not in have:
             con.execute(f"ALTER TABLE players ADD COLUMN {column} {kind}")
     return con

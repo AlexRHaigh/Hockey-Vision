@@ -206,6 +206,10 @@ function starButton(p, onChange) {
   return btn;
 }
 
+function offRosterBadge(p) {
+  return p.on_roster === 0 ? [" ", h("span", { class: "badge", title: "On no NHL roster at the last roster refresh: sent down, waived or released" }, "Off roster")] : null;
+}
+
 function playerTable(players, opts = {}) {
   if (!players.length) return h("div", { class: "empty" }, opts.empty || "No players.");
   const full = !opts.compact;
@@ -216,7 +220,7 @@ function playerTable(players, opts = {}) {
       onkeydown: (e) => { if (e.key === "Enter") go(`#/player/${p.player_id}`); } },
       h("td", {}, starButton(p, opts.onFavorite)),
       full ? h("td", { class: "num muted" }, p.number ?? "") : null,
-      h("td", { class: "name" }, p.name, h("small", {}, p.team_name || p.team || "")),
+      h("td", { class: "name" }, p.name, offRosterBadge(p), h("small", {}, p.team_name || p.team || "")),
       h("td", { title: p.position }, POS_SHORT[p.position] || p.position || ""),
       h("td", {}, meter(p.form.form)),
       full ? [h("td", { class: "r num" }, fmt(p.form.last)), h("td", { class: "r" }, trend(p.form.trend)),
@@ -477,7 +481,7 @@ function nhlDataCard(status) {
   const btn = h("button", { class: "btn primary", type: "button" }, "Refresh NHL data");
   btn.addEventListener("click", async () => {
     btn.disabled = true;
-    btn.textContent = "Refreshing… (about a minute)";
+    btn.textContent = "Refreshing…";
     try {
       const out = await api("POST", "/api/nhl/sync", {});
       const failed = Object.entries(out.report).filter(([, r]) => !r.ok);
@@ -659,7 +663,7 @@ async function pagePlayer(id) {
   const body = [
     h("div", { class: "card" }, h("div", { class: "player-head" },
       headshot(p, "headshot logo-lg"),
-      h("div", {}, h("h1", {}, p.name),
+      h("div", {}, h("h1", {}, p.name, offRosterBadge(p)),
         h("div", { class: "muted" }, `${p.position || ""} · `, h("a", { href: `#/players?team=${p.team}` }, p.team_name || p.team || "No team")),
         bioLine(p.bio)),
       h("span", { class: "jersey" }, p.number !== null ? `#${p.number}` : ""),
