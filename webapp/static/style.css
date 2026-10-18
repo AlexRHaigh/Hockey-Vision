@@ -222,6 +222,9 @@ td.name small { display: block; font-weight: 400; color: var(--text-3); }
 .chart .bar { fill: var(--accent); transition: opacity 0.1s; }
 .chart .bar.neg { fill: var(--neg); }
 .chart .hit { fill: transparent; cursor: pointer; }
+.chart .hit.static { cursor: default; }
+/* Only the hit areas take the pointer: clicks on a bar, the 50 line or a label reach the game under them. */
+.chart .bar, .chart .ref, .chart .grid, .chart text { pointer-events: none; }
 .chart .hit:hover + .bar, .chart .bar.selected { fill: var(--accent-strong); }
 .chart .form-line { fill: none; stroke: var(--text); stroke-width: 2; stroke-linejoin: round; stroke-linecap: round; }
 .legend { display: flex; gap: 16px; flex-wrap: wrap; font-size: 0.8rem; color: var(--text-2); margin-top: 8px; }
@@ -236,16 +239,6 @@ td.name small { display: block; font-weight: 400; color: var(--text-3); }
   font-size: 0.82rem; max-width: 260px;
 }
 #tooltip strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
-
-/* Breakdown */
-.part + .part { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
-.part-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
-.breakdown { display: grid; grid-template-columns: minmax(120px, 180px) 1fr 56px; gap: 6px 10px; align-items: center; font-size: 0.85rem; }
-.breakdown .track { position: relative; height: 12px; }
-.breakdown .track::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-3); }
-.breakdown .track span { position: absolute; top: 0; bottom: 0; border-radius: 3px; }
-.breakdown .track span.pos { left: 50%; background: var(--accent); border-radius: 0 3px 3px 0; }
-.breakdown .track span.neg { right: 50%; background: var(--neg); border-radius: 3px 0 0 3px; }
 
 /* Pool assessment */
 .verdict { display: flex; gap: 16px; align-items: center; padding: 16px 18px; border-radius: var(--radius); border: 1px solid var(--border); background: var(--surface); }
@@ -314,5 +307,4 @@ td.name small { display: block; font-weight: 400; color: var(--text-3); }
   .upgrade { grid-template-columns: 1fr; }
   .upgrade .arrow { display: none; }
   .player-head .actions { margin-left: 0; }
-  .breakdown { grid-template-columns: 110px 1fr 48px; }
 }

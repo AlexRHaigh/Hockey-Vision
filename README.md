@@ -147,8 +147,8 @@ python -m webapp.demo                         # or: 300 made-up demo games to tr
   points, goalie wins and games this week.
 - **Players**: all 32 teams from `rosters/nhl_active_players.csv` (refresh with `fetch_roster.py`;
   the server loads it into an empty database, `python -c "from webapp import db; db.load_roster(db.connect())"`
-  reloads it). Each player's page has their form, trend, a chart of their game scores, what made up
-  each score, and their game log.
+  reloads it). Each player's page has their form, trend, a chart of their game scores, their NHL
+  season, and their game log.
 - **Imports**: `webapp.ingest` reads an export's `player_stats.csv` and matches players to NHL ids
   by team and jersey number, so the clip must have been run with `--teams`. With `--roster` (the
   `fetch_roster.py --game` file) the game's date and teams come from the roster; otherwise pass
