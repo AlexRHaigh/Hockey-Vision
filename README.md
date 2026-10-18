@@ -142,10 +142,9 @@ python -m webapp.demo                         # or: 300 made-up demo games to tr
   player's season totals (GP, G, A, P, +/-, PIM, PPP, SOG,
   TOI/GP; goalies W, L, OTL, GAA, SV%, SO) and this week's schedule. Player pages also fetch the
   player's last 5 games, draft and career totals when opened, cached for 6 hours. Imported games
-  with an NHL game id (`webapp.ingest --game-id`, or `python -m webapp.nhl boxscore <id>`) get the
-  official box score: final score, and each player's goals, assists and TOI next to their video
-  score. The overview adds your pool's NHL points, goalie wins and games this week. The video
-  scores and trade calls don't use the NHL data; it is shown alongside them.
+  are matched to their NHL game by date and teams (or `webapp.ingest --game-id`) and get the
+  official box score, which goes into the game scores (below). The overview adds your pool's NHL
+  points, goalie wins and games this week.
 - **Players**: all 32 teams from `rosters/nhl_active_players.csv` (refresh with `fetch_roster.py`;
   the server loads it into an empty database, `python -c "from webapp import db; db.load_roster(db.connect())"`
   reloads it). Each player's page has their form, trend, a chart of their game scores, what made up
@@ -154,11 +153,25 @@ python -m webapp.demo                         # or: 300 made-up demo games to tr
   by team and jersey number, so the clip must have been run with `--teams`. With `--roster` (the
   `fetch_roster.py --game` file) the game's date and teams come from the roster; otherwise pass
   `--date`, `--away` and `--home`. Importing the same folder again replaces the game.
-- **Game score**: each counted play is worth impact points (takeaway +2, good pass +1, turnover -2,
-  ...), turned into points per minute the player was detected, blended with 3 minutes of typical
-  play so brief appearances can't run away, and compared with every other player-game in the
-  database: 50 is a typical game, 73 one spread better, 88 two. Goalies are scored on saves,
-  recoveries and possible goals against.
+- **Game score**: the video and the NHL's box score together, in three parts:
+  - *Play*, from the video: movement, possession, pass quality and pressure (good pass +1,
+    takeaway +2, turnover -2, ...), as points per minute the player was detected, blended with 3
+    minutes of typical play so brief appearances can't run away.
+  - *Results*, from the box score: goals +6, assists +4, shots on goal, +/-, hits, blocks, penalty
+    minutes; goalies saves, goals against, the win and shutouts.
+  - *Backed by video*: official results the video saw the player create in the same game count
+    extra. That covers an assist when the video saw good passes, a goal when it saw the shots,
+    points after it saw the player win the puck, and a plus backed by defensive plays. Turnovers on
+    video in a minus game count against. Each result needs its own play on video: 4 good passes
+    back at most 4 assists.
+
+  Play is compared with every other player-game in the database, and results by where the game
+  ranks among them. Until the database has enough games, results are ranked against 100 of this
+  season's real box scores. The two are blended, and play counts less when the player was barely
+  on screen: 50 is a typical game, 73 one spread better, 88 two. With no box score yet, the score
+  is the video alone (its own shots and saves standing in); players the video never identified are
+  scored on their box score alone. The matching is per game, not per play: the video's times
+  aren't lined up with the game clock yet. The weights are in `webapp/scoring.py`.
 - **Form and trade calls**: form is the last 5 scores, recent and longer-seen games counting more.
   A player is *Trade* below 40 form, *Watch* below 46 or after a 10-point slide, *Keep* otherwise,
   and *Hold* until 3 games are in.

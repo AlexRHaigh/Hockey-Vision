@@ -61,7 +61,8 @@ BOXSCORE = {"id": 2025020969, "gameDate": "2026-03-03", "gameState": "OFF",
                                            "position": "C", "goals": 1, "assists": 1, "points": 2, "plusMinus": -1,
                                            "pim": 0, "sog": 4, "hits": 1, "blockedShots": 0, "toi": "19:42"}],
                              "defense": [], "goalies": [{"playerId": 6, "saveShotsAgainst": "29/33", "goalsAgainst": 4,
-                                                         "savePctg": 0.879, "toi": "58:31", "decision": "L"}]},
+                                                         "savePctg": 0.879, "toi": "58:31", "decision": "L"},
+                                                        {"playerId": 7, "saveShotsAgainst": "0/0", "toi": "00:00"}]},
                 "homeTeam": {"forwards": [{"playerId": 1, "goals": 2, "assists": 0, "points": 2, "sog": 5, "toi": "20:05"}],
                              "defense": [], "goalies": []}}}
 LANDING = {"playerId": 1, "isActive": True, "currentTeamAbbrev": "SJS", "fullTeamName": {"default": "San Jose Sharks"},
@@ -108,6 +109,7 @@ ROSTER_CSV = [
     {"team": "MTL", "team_name": "Montréal Canadiens", "number": 14, "player": "Nick Suzuki", "position": "Center", "player_id": 4, "as_of": "2026-10-01"},
     {"team": "MTL", "team_name": "Montréal Canadiens", "number": 8, "player": "Mike Matheson", "position": "Defense", "player_id": 5, "as_of": "2026-10-01"},
     {"team": "MTL", "team_name": "Montréal Canadiens", "number": 35, "player": "Sam Montembeault", "position": "Goalie", "player_id": 6, "as_of": "2026-10-01"},
+    {"team": "MTL", "team_name": "Montréal Canadiens", "number": 40, "player": "Backup Goalie", "position": "Goalie", "player_id": 7, "as_of": "2026-10-01"},
 ]
 
 
@@ -184,7 +186,7 @@ class SyncTests(unittest.TestCase):
         self.assertEqual((player(1)["shoots"], player(1)["birth_place"]), ("L", "Vancouver, BC, CAN"))
         # Montembeault (6) is on no roster the API returned: kept, but off the roster and out of MTL's list.
         self.assertEqual([player(pid)["on_roster"] for pid in (1, 4, 5, 6)], [1, 1, 1, 0])
-        self.assertIn("1 no longer on a roster", report["rosters"]["detail"])
+        self.assertIn("2 no longer on a roster", report["rosters"]["detail"])  # Montembeault and the backup
         self.assertNotIn(6, [p["player_id"] for p in api.players(self.con, {"team": "MTL"}, {})])
         self.assertIn(6, [p["player_id"] for p in api.players(self.con, {"q": "Montembeault"}, {})])
         self.assertEqual(self.con.execute("SELECT COUNT(*) FROM nhl_season_stats").fetchone()[0], 3)  # 999 isn't ours
@@ -216,11 +218,32 @@ class SyncTests(unittest.TestCase):
         game_id, _, _ = ingest.import_game(self.con, rows, "test:box", "2026-03-03", "MTL", "SJS", nhl_game_id=2025020969)
         with mock.patch.object(nhl, "fetch_json", fake_api):
             report = nhl.sync(self.con, only=["boxscores"])
-        self.assertEqual(report["boxscores"]["detail"], "1 games")
+        self.assertEqual(report["boxscores"]["detail"], "1 box score fetched")
         g = api.game(self.con, {}, {}, game_id)
-        self.assertEqual((g["official"]["home_score"], g["players"][0]["official"]["goals"]), (4, 2))
+        players = {p["player_id"]: p for p in g["players"]}
+        self.assertEqual((g["official"]["home_score"], players[1]["official"]["goals"]), (4, 2))
+        self.assertEqual(players[1]["basis"], "video+nhl")
+        # Suzuki (4) and Montembeault (6) weren't identified on video: scored from the box score alone.
+        self.assertEqual((players[4]["basis"], players[6]["basis"]), ("nhl", "nhl"))
+        self.assertNotIn(7, players)  # a backup goalie who didn't go in isn't scored
+        self.assertIn("Goals backed by shots on video", [c["label"] for c in players[1]["components"]])
         with mock.patch.object(nhl, "fetch_json", unreachable):  # a final box score isn't fetched again
-            self.assertEqual(nhl.sync(self.con, only=["boxscores"])["boxscores"]["detail"], "0 games")
+            self.assertEqual(nhl.sync(self.con, only=["boxscores"])["boxscores"]["detail"], "0 box scores fetched")
+
+    def test_imported_games_are_linked_to_their_nhl_game(self):
+        rows = [{"player_id": "SJS #71", "team": "A", "team_abbrev": "SJS", "jersey_number": "71", "role": "skater",
+                 "player_name": "Macklin Celebrini", "identified": True, "time_detected_s": 300}]
+        # Teams the other way round from the schedule's MTL at SJS: still the same game.
+        game_id, _, _ = ingest.import_game(self.con, rows, "test:link", "2026-10-18", "SJS", "MTL")
+        ingest.import_game(self.con, rows, "test:demo", "2026-10-18", "SJS", "MTL", is_demo=True)
+        ingest.import_game(self.con, rows, "test:none", "2026-10-19", "SJS", "MTL")
+        with mock.patch.object(nhl, "fetch_json", fake_api):
+            detail = nhl.sync(self.con, only=["boxscores"])["boxscores"]["detail"]
+        ids = dict(self.con.execute("SELECT source, nhl_game_id FROM games").fetchall())
+        self.assertEqual(ids, {"test:link": 2026020101, "test:demo": None, "test:none": None})
+        self.assertIn("1 game newly linked", detail)
+        self.assertIn("no NHL game found for SJS at MTL 2026-10-19", detail)
+        self.assertIn("failed: 2026020101", detail)  # the canned API has no box score for it
 
     def test_api_serves_nhl_data(self):
         with mock.patch.object(nhl, "fetch_json", fake_api):

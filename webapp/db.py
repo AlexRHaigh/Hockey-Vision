@@ -174,13 +174,39 @@ def ensure_players(con):
 
 
 def data_version(con):
-    """Changes whenever games are imported or removed, for caching scores."""
-    return tuple(con.execute("SELECT COUNT(*), MAX(id), MAX(imported_at) FROM games").fetchone())
+    """Changes whenever games or box scores are imported, linked or removed, for caching scores."""
+    return tuple(con.execute("""SELECT (SELECT COUNT(*) FROM games), (SELECT MAX(id) FROM games),
+                                       (SELECT MAX(imported_at) FROM games),
+                                       (SELECT GROUP_CONCAT(COALESCE(nhl_game_id, ''), ',') FROM games),
+                                       (SELECT COUNT(*) FROM nhl_boxscores), (SELECT MAX(updated_at) FROM nhl_boxscores)""").fetchone())
 
 
-def all_game_stats(con):
-    rows = con.execute("""SELECT s.game_id, s.player_id, s.team, s.role, s.stats, g.date, g.label, g.away, g.home,
-                                 g.is_demo
-                          FROM game_stats s JOIN games g ON g.id = s.game_id
-                          ORDER BY g.date DESC, g.id DESC""").fetchall()
-    return [{**dict(r), "stats": json.loads(r["stats"])} for r in rows]
+def all_player_games(con):
+    """Every player-game to score, newest first: each video row (stats) with its official box score
+    line if the game has one (line), and the box score lines of players the video didn't identify
+    (stats None). Lines of players not in the database, or with no ice time (a dressed backup
+    goalie who didn't go in), are left out."""
+    games = {r["id"]: dict(r) for r in con.execute("SELECT * FROM games")}
+    lines = {}
+    for r in con.execute("SELECT nhl_game_id, player_id, data FROM nhl_boxscore_lines"):
+        lines.setdefault(r["nhl_game_id"], {})[r["player_id"]] = json.loads(r["data"])
+    known = {r[0] for r in con.execute("SELECT player_id FROM players")}
+
+    def row(g, player_id, team, role, stats, line):
+        return {"game_id": g["id"], "date": g["date"], "label": g["label"], "away": g["away"], "home": g["home"],
+                "is_demo": g["is_demo"], "player_id": player_id, "team": team, "role": role, "stats": stats,
+                "line": line}
+
+    out, seen = [], set()
+    for r in con.execute("SELECT * FROM game_stats"):
+        g = games[r["game_id"]]
+        line = lines.get(g["nhl_game_id"], {}).get(r["player_id"])
+        line = line if line and line.get("toi_s") else None
+        out.append(row(g, r["player_id"], r["team"], r["role"], json.loads(r["stats"]), line))
+        seen.add((g["id"], r["player_id"]))
+    for g in games.values():
+        for player_id, line in lines.get(g["nhl_game_id"], {}).items():
+            if (g["id"], player_id) not in seen and player_id in known and line.get("toi_s"):
+                out.append(row(g, player_id, line.get("team"), line.get("role") or "skater", None, line))
+    out.sort(key=lambda r: (r["date"], r["game_id"]), reverse=True)
+    return out

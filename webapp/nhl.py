@@ -329,18 +329,51 @@ def sync_boxscore(con, nhl_game_id):
     return game, lines
 
 
+def find_game_id(date, away, home):
+    """The NHL game id of `away` at `home` on `date` (YYYY-MM-DD), from that day's schedule, or None.
+    Either team order matches, as broadcasts don't say which side is which."""
+    for g in parse_schedule(_fetch(f"{API_WEB}/schedule/{date}")):
+        if g["date"] == date and {g["away"], g["home"]} == {away, home}:
+            return g["nhl_game_id"]
+    return None
+
+
+def link_games(con):
+    """Give imported (non-demo) games with a date and both teams but no NHL game id their id.
+    Returns (linked, not found)."""
+    linked, missing = 0, []
+    for g in con.execute("SELECT id, date, away, home FROM games WHERE nhl_game_id IS NULL AND is_demo = 0 "
+                         "AND away IS NOT NULL AND home IS NOT NULL").fetchall():
+        game_id = find_game_id(g["date"], g["away"], g["home"])
+        if game_id is None:
+            missing.append(f"{g['away']} at {g['home']} {g['date']}")
+            continue
+        with con:
+            con.execute("UPDATE games SET nhl_game_id = ? WHERE id = ?", (game_id, g["id"]))
+        linked += 1
+    return linked, missing
+
+
 def sync_boxscores(con):
-    """Box scores of imported games with an NHL game id that don't have a final one yet."""
-    have = {r["nhl_game_id"]: json.loads(r["data"]).get("state") for r in con.execute("SELECT * FROM nhl_boxscores")}
-    ids = [r[0] for r in con.execute("SELECT DISTINCT nhl_game_id FROM games WHERE nhl_game_id IS NOT NULL")
-           if have.get(r[0]) not in ("FINAL", "OFF")]
+    """Link imported games to their NHL game, then fetch the box scores that aren't final yet."""
     failed = []
+    try:
+        linked, missing = link_games(con)
+    except NhlError as e:
+        linked, missing = 0, []
+        failed.append(f"linking games ({e})")
+    have = {r["nhl_game_id"]: json.loads(r["data"]).get("state") for r in con.execute("SELECT * FROM nhl_boxscores")}
+    ids = [r[0] for r in con.execute("SELECT DISTINCT nhl_game_id FROM games WHERE nhl_game_id IS NOT NULL AND is_demo = 0")
+           if have.get(r[0]) not in ("FINAL", "OFF")]
     for game_id in ids:
         try:
             sync_boxscore(con, game_id)
         except NhlError as e:
             failed.append(f"{game_id} ({e})")
-    return f"{len(ids) - len(failed)} games" + (f"; failed: {', '.join(failed)}" if failed else "")
+    fetched = len(ids) - sum(1 for f in failed if not f.startswith("linking"))
+    return (f"{fetched} box score{'s' * (fetched != 1)} fetched" + (f", {linked} game{'s' * (linked != 1)} newly linked" if linked else "")
+            + (f"; no NHL game found for {', '.join(missing)}" if missing else "")
+            + (f"; failed: {', '.join(failed)}" if failed else ""))
 
 
 def player_landing(con, player_id, max_age_hours=PLAYER_PAGE_HOURS):

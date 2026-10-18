@@ -7,10 +7,15 @@ pipeline. Demo games are labelled "Demo" everywhere in the app and can be remove
 
 Each player gets a hidden skill level, and some get better or worse over the schedule, so form,
 trends and trade calls have something to find. The stats look like player_stats.csv rows and are
-imported through the same path as real exports (ingest.import_game).
+imported through the same path as real exports (ingest.import_game). Each demo game also gets a
+made-up box score that agrees with its video stats (goals partly from the possible goals seen,
+assists leaning on good passes, each goalie's goals against the other team's goals), so its scores
+combine the two like a real game's. Demo box scores have negative NHL game ids, so they can't be
+mistaken for (or fetched as) real games.
 """
 
 import argparse
+import json
 import math
 import random
 import sys
@@ -43,6 +48,7 @@ def skater_row(rng, player, skill):
     minutes = rng.uniform(2.0, 9.0)
     s = {k: poisson(rng, rate * minutes * (skill if k not in ("turnovers", "times_defended") else 1 / skill))
          for k, rate in SKATER_RATES.items()}
+    s["distance_ft"] = round(minutes * 60 * rng.uniform(9, 13) * (0.9 + 0.1 * skill), 1)
     if player["position"] == "Defense":
         s["blocked_shots"] += poisson(rng, 0.1 * minutes)
         s["shots"] = poisson(rng, 0.2 * minutes * skill)
@@ -76,8 +82,53 @@ def team_rows(rng, players, profile, progress):
             rows.append({"player_id": f"{p['team']} #{p['number']}", "team": "", "team_abbrev": p["team"],
                          "jersey_number": str(p["number"]), "player_name": p["name"],
                          "role": "goalie" if g == "G" else "skater", "identified": True,
-                         "time_detected_s": round(minutes * 60, 2), **stats})
+                         "time_detected_s": round(minutes * 60, 2), **stats,
+                         "_nhl_id": p["player_id"], "_skill": skill, "_defense": g == "D"})
     return rows
+
+
+def box_score(rng, nhl_game_id, away, home, rows):
+    """A made-up box score (header, lines) agreeing with the game's video rows."""
+    lines, goals = [], {away: 0, home: 0}
+    for r in rows:
+        if r["role"] == "goalie":
+            continue
+        skill = r["_skill"]
+        # Per skater-game this comes to about the NHL's 0.17 goals, 0.29 assists and 1.5 shots.
+        g = sum(rng.random() < 0.55 for _ in range(r.get("possible_goals", 0))) + poisson(rng, 0.06 * skill)
+        a = poisson(rng, 0.15 * skill + 0.07 * r.get("good_passes", 0))
+        goals[r["team_abbrev"]] += g
+        lines.append({"player_id": r["_nhl_id"], "team": r["team_abbrev"], "name": r["player_name"],
+                      "number": int(r["jersey_number"]), "role": "skater",
+                      "toi_s": int(rng.uniform(1100, 1500) if r["_defense"] else rng.uniform(700, 1250)),
+                      "goals": g, "assists": a, "points": g + a,
+                      "plus_minus": round(rng.gauss(1.5 * (skill - 1), 1.1)), "pim": 2 * (rng.random() < 0.12),
+                      "shots": round(0.6 * r.get("shots", 0)) + poisson(rng, 0.4), "hits": poisson(rng, 1.2),
+                      "blocks": poisson(rng, 1.3 if r["_defense"] else 0.5),
+                      "pp_goals": sum(rng.random() < 0.2 for _ in range(g))})
+    overtime = goals[away] == goals[home]
+    if overtime:  # someone scores in overtime
+        winner = rng.choice([away, home])
+        scorer = rng.choice([l for l in lines if l["team"] == winner])
+        scorer.update(goals=scorer["goals"] + 1, points=scorer["points"] + 1)
+        goals[winner] += 1
+    for r in rows:
+        if r["role"] != "goalie":
+            continue
+        team = r["team_abbrev"]
+        against = goals[home if team == away else away]
+        won = goals[team] > goals[home if team == away else away]
+        lines.append({"player_id": r["_nhl_id"], "team": team, "name": r["player_name"],
+                      "number": int(r["jersey_number"]), "role": "goalie", "toi_s": 3600 + 300 * overtime,
+                      "saves": r.get("saves", 0) + poisson(rng, 12), "goals_against": against,
+                      "decision": "W" if won else "O" if overtime else "L", "starter": True})
+    for l in lines:
+        if l["role"] == "goalie":
+            l["shots_against"] = l["saves"] + l["goals_against"]
+            l["save_pct"] = round(l["saves"] / l["shots_against"], 3) if l["shots_against"] else None
+    header = {"nhl_game_id": nhl_game_id, "state": "OFF", "away": away, "home": home,
+              "away_score": goals[away], "home_score": goals[home], "demo": True}
+    return header, lines
 
 
 def generate(con, n_games, seed, end=None):
@@ -99,12 +150,24 @@ def generate(con, n_games, seed, end=None):
         day = start + timedelta(days=round(i * (end - start).days / max(1, n_games - 1)))
         progress = i / max(1, n_games - 1)
         rows = team_rows(rng, by_team[away], profile, progress) + team_rows(rng, by_team[home], profile, progress)
+        nhl_game_id = -(seed * 10000 + i + 1)
+        header, lines = box_score(rng, nhl_game_id, away, home, rows)
+        with con:
+            con.execute("INSERT OR REPLACE INTO nhl_boxscores (nhl_game_id, data, updated_at) VALUES (?, ?, ?)",
+                        (nhl_game_id, json.dumps(header), db.now()))
+            con.executemany("INSERT OR REPLACE INTO nhl_boxscore_lines (nhl_game_id, player_id, team, data) VALUES (?, ?, ?, ?)",
+                            [(nhl_game_id, l["player_id"], l["team"], json.dumps(l)) for l in lines])
+        for r in rows:
+            for k in ("_nhl_id", "_skill", "_defense"):
+                r.pop(k)
         ingest.import_game(con, rows, f"demo:{seed}:{i}", day.isoformat(), away, home,
-                           f"Demo: {away} at {home}", is_demo=True)
+                           f"Demo: {away} at {home}", nhl_game_id=nhl_game_id, is_demo=True)
 
 
 def clear(con):
     with con:
+        con.execute("DELETE FROM nhl_boxscore_lines WHERE nhl_game_id < 0")
+        con.execute("DELETE FROM nhl_boxscores WHERE nhl_game_id < 0")
         return con.execute("DELETE FROM games WHERE is_demo = 1").rowcount
 
 

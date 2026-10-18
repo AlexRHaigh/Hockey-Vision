@@ -8,7 +8,8 @@ Players are matched to NHL player ids by team and jersey number (the name breaks
 must have been run with run_models.py --teams. With --roster (the fetch_roster.py --game file the
 clip was run with) the game's date and teams come from it and players are matched against exactly
 who dressed; otherwise against the active rosters. Importing the same folder again replaces it.
-With --game-id the game's official box score is fetched from the NHL too (nhl.py).
+The game's NHL game id is looked up from its date and teams (or given with --game-id), and its
+official box score fetched (nhl.py), so the players' scores combine the video with the results.
 """
 
 import argparse
@@ -152,13 +153,26 @@ def main():
         game = con.execute("SELECT label, date FROM games WHERE id = ?", (game_id,)).fetchone()
         print(f"{export_dir}: game {game_id} ({game['label']}, {game['date']}): {matched} players"
               + (f", {skipped} rows not matched to a player (unidentified or not on the roster)" if skipped else ""))
-    if args.game_id:
-        try:
-            box, lines = nhl.sync_boxscore(con, args.game_id)
-            print(f"Official box score: {box['away']} {box['away_score']} at {box['home']} {box['home_score']}, "
-                  f"{len(lines)} player lines")
-        except nhl.NhlError as e:
-            print(f"Couldn't fetch the official box score ({e}); `python -m webapp.nhl sync` retries it")
+        link_box_score(con, game_id, args.game_id)
+
+
+def link_box_score(con, game_id, nhl_game_id=None):
+    """Find the game's NHL game id (unless given) and fetch its box score, so its scores combine the
+    video with the official results. Failing only prints: `python -m webapp.nhl sync` retries."""
+    g = con.execute("SELECT * FROM games WHERE id = ?", (game_id,)).fetchone()
+    try:
+        nhl_game_id = nhl_game_id or g["nhl_game_id"] or (
+            nhl.find_game_id(g["date"], g["away"], g["home"]) if g["away"] and g["home"] else None)
+        if not nhl_game_id:
+            print("  No NHL game found for its date and teams: scored from the video alone")
+            return
+        with con:
+            con.execute("UPDATE games SET nhl_game_id = ? WHERE id = ?", (nhl_game_id, game_id))
+        box, lines = nhl.sync_boxscore(con, nhl_game_id)
+        print(f"  NHL game {nhl_game_id}: {box['away']} {box['away_score']} at {box['home']} {box['home_score']}, "
+              f"{len(lines)} player lines; scores combine the video with the box score")
+    except nhl.NhlError as e:
+        print(f"  Couldn't reach the NHL's API ({e}); `python -m webapp.nhl sync` retries it")
 
 
 if __name__ == "__main__":

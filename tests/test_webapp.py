@@ -40,7 +40,7 @@ def write_roster(path, rows=ROSTER):
 class ScoringTests(unittest.TestCase):
     def test_typical_game_scores_50(self):
         # Takeaways worth exactly the typical points per minute over 10 minutes.
-        stats = {"time_detected_s": 600, "takeaways": CAL["skater"][0] * 10 / scoring.SKATER_WEIGHTS["takeaways"][1]}
+        stats = {"time_detected_s": 600, "takeaways": CAL["video"]["skater"][0] * 10 / scoring.VIDEO_WEIGHTS["skater"]["takeaways"][1]}
         self.assertAlmostEqual(scoring.game_score(stats, "skater", CAL)["score"], 50, delta=0.2)
 
     def test_better_play_scores_higher_and_turnovers_lower(self):
@@ -68,10 +68,21 @@ class ScoringTests(unittest.TestCase):
         self.assertNotIn("shots", [c["stat"] for c in s["components"]])
 
     def test_calibration_needs_enough_rows(self):
-        self.assertEqual(scoring.calibrate([("skater", 10, 5)] * 5), CAL)
-        cal = scoring.calibrate([("skater", 3 * m, m) for m in range(1, 40)])
-        self.assertAlmostEqual(cal["skater"][0], 3.0)
-        self.assertEqual(cal["skater"][1], scoring.MIN_SPREAD["skater"])
+        self.assertEqual(scoring.calibrate([("skater", {"video": (10, 5)})] * 5), CAL)
+        cal = scoring.calibrate([("skater", {"video": (3 * m, m)}) for m in range(1, 40)])
+        self.assertAlmostEqual(cal["video"]["skater"][0], 3.0)
+        self.assertEqual(cal["video"]["skater"][1], scoring.MIN_SPREAD["video"]["skater"])
+        self.assertEqual(cal["results"], CAL["results"])  # results need MIN_RESULT_ROWS
+        cal = scoring.calibrate([("skater", {"results": (float(i % 10), None)}) for i in range(scoring.MIN_RESULT_ROWS)])
+        self.assertEqual((cal["results"]["skater"][0], cal["results"]["skater"][-1], len(cal["results"]["skater"])), (0.0, 9.0, 21))
+
+    def test_percentiles(self):
+        table = [float(i) for i in range(21)]  # value i at the (5 i)th percentile
+        self.assertAlmostEqual(scoring.percentile(10, table), 0.5)
+        self.assertAlmostEqual(scoring.percentile(10.5, table), 0.525)
+        self.assertEqual((scoring.percentile(-5, table), scoring.percentile(99, table)), (0.0, 1.0))
+        self.assertAlmostEqual(scoring.percentile(0, [0.0] * 11 + [float(i) for i in range(1, 11)]), 0.25)  # shared: middle
+        self.assertAlmostEqual(scoring.results_z(99, table)[0], 1 - scoring.PERCENTILE_LIMIT)
 
     def test_form_weights_recent_games(self):
         games = [{"score": 80, "minutes": 5}, {"score": 40, "minutes": 5}, {"score": 40, "minutes": 5}, {"score": 40, "minutes": 5}]
@@ -123,6 +134,76 @@ class ScoringTests(unittest.TestCase):
 
     def test_empty_pool(self):
         self.assertEqual(scoring.assess_pool([], [], {"F": 1})["verdict"], "empty")
+
+
+VIDEO = {"time_detected_s": 360, "good_passes": 4, "passes_completed": 6, "takeaways": 1, "shots": 3,
+         "defensive_plays": 2, "turnovers": 0}
+
+
+def line(**kw):
+    return {"role": "skater", "goals": 0, "assists": 0, "points": 0, "shots": 1, "plus_minus": 0, "toi_s": 1000, **kw}
+
+
+class CombinedScoreTests(unittest.TestCase):
+    def score(self, stats, ln, role="skater"):
+        return scoring.game_score(stats, role, CAL, ln)
+
+    def test_basis(self):
+        self.assertEqual(self.score(VIDEO, None)["basis"], "video")
+        self.assertEqual(self.score(None, line())["basis"], "nhl")
+        both = self.score(VIDEO, line())
+        self.assertEqual(both["basis"], "video+nhl")
+        self.assertEqual(set(both["parts"]), {"play", "results", "backed"})
+        # With a box score the video's shots don't count twice: the official ones do.
+        self.assertNotIn("shots", [c["stat"] for c in both["components"] if c["part"] == "play"])
+
+    def test_assist_counts_more_with_good_passes_on_video(self):
+        assist = line(assists=1, points=1)
+        with_passes = self.score(VIDEO, assist)
+        without = self.score({**VIDEO, "good_passes": 0}, assist)
+        backed = [c for c in with_passes["components"] if c["part"] == "backed"]
+        self.assertIn("Assists backed by good passes on video", [c["label"] for c in backed])
+        self.assertGreater(with_passes["score"], without["score"] + 10)
+        # Each official assist needs its own good pass: 4 good passes back 1 assist once.
+        self.assertEqual(next(c for c in backed if c["stat"] == "assists")["count"], 1)
+
+    def test_goal_backed_only_by_shots_on_video(self):
+        goal = line(goals=1, points=1)
+        self.assertIn("goals", [c["stat"] for c in self.score(VIDEO, goal)["components"] if c["part"] == "backed"])
+        self.assertNotIn("goals", [c["stat"] for c in self.score({**VIDEO, "shots": 0}, goal)["components"] if c["part"] == "backed"])
+
+    def test_turnovers_in_a_minus_game_count_against(self):
+        minus = line(plus_minus=-2)
+        clean, sloppy = self.score(VIDEO, minus), self.score({**VIDEO, "turnovers": 3}, minus)
+        penalty = [c for c in sloppy["components"] if c["part"] == "backed" and c["points"] < 0]
+        self.assertEqual((penalty[0]["count"], penalty[0]["points"]), (2, -4.0))
+        self.assertLess(sloppy["score"], clean["score"])
+
+    def test_better_box_score_scores_higher(self):
+        scores = [self.score(VIDEO, line(**kw))["score"] for kw in
+                  ({"plus_minus": -2}, {}, {"assists": 1, "points": 1}, {"goals": 1, "assists": 2, "points": 3, "plus_minus": 2})]
+        self.assertEqual(scores, sorted(scores))
+        self.assertTrue(all(0 < s < 100 for s in scores))
+
+    def test_barely_seen_player_is_mostly_their_box_score(self):
+        assist = line(assists=1, points=1)
+        glimpse = self.score({"time_detected_s": 6, "turnovers": 1}, assist)
+        self.assertLess(glimpse["parts"]["play"]["weight"], 0.02)
+        self.assertAlmostEqual(glimpse["score"], self.score(None, assist)["score"], delta=3)
+
+    def test_goalie_box_score(self):
+        win = {"role": "goalie", "saves": 30, "shots_against": 31, "goals_against": 1, "decision": "W", "toi_s": 3600}
+        loss = {**win, "saves": 26, "goals_against": 5, "decision": "L"}
+        shutout = {**win, "saves": 31, "goals_against": 0}
+        w, l, so = (self.score(None, x, "goalie") for x in (win, loss, shutout))
+        self.assertGreater(w["score"], 70)
+        self.assertLess(l["score"], 30)
+        self.assertIn("shutout", [c["stat"] for c in so["components"]])
+        self.assertGreater(so["score"], w["score"])
+
+    def test_official_games_count_fully_in_form(self):
+        self.assertEqual(self.score(None, line())["weight"], 1.0)
+        self.assertEqual(self.score({"time_detected_s": 60}, None)["weight"], 0.5 + 0.5 * 0.25)
 
 
 class IngestTests(unittest.TestCase):

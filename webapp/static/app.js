@@ -315,19 +315,54 @@ function scoreChart(games, selectedId, onSelect) {
     ariaLabel: `Game scores for the last ${data.length} games; the game log table below lists every value.` });
 }
 
+const BASIS = { "video+nhl": "Video + NHL", video: "Video only", nhl: "NHL box score only" };
+const PARTS = [
+  ["video", "From the video", "No box score for this game, so the video's own shots and saves stand in for the results."],
+  ["play", "From the video: how they played", "Movement, possession, pass quality and pressure."],
+  ["results", "From the NHL box score: what they produced", "Goals, assists, shots on goal, +/-, hits, blocks, penalties."],
+  ["backed", "Backed by video: results the video saw them create", "Official results with the play behind them on video in the same game."],
+];
+
+function officialSummary(line) {
+  if (!line) return "–";
+  if (line.role === "goalie") return `${line.saves ?? 0}/${line.shots_against ?? 0} SV${line.decision ? ` · ${line.decision}` : ""}`;
+  const pm = line.plus_minus ?? 0;
+  return `${line.goals ?? 0} G · ${line.assists ?? 0} A · ${pm > 0 ? "+" : ""}${pm}`;
+}
+
+function partSummary(key, part, g) {
+  if (key === "video" || key === "play") {
+    return `${fmt(part.points, 1)} points in ${fmt(g.minutes, 1)} min seen → ${fmt(part.rate, 2)} a minute after blending with a typical game`
+      + (key === "play" ? ` · counts ${Math.round(100 * part.weight / (part.weight + 0.55))}% of the score` : "");
+  }
+  if (key === "results") {
+    const backed = g.parts.backed ? g.parts.backed.points : 0;
+    return `${fmt(part.points, 1)} points${backed ? ` + ${fmt(backed, 1)} backed by video` : ""} → better than ${fmt(part.percentile)}% of NHL games`;
+  }
+  return `${part.points > 0 ? "+" : ""}${fmt(part.points, 1)} points, added to the results`;
+}
+
 function breakdown(g) {
   if (!g.components.length) return h("p", { class: "muted" }, "No counted plays in this game; the score comes from time on the ice alone.");
   const max = Math.max(...g.components.map((c) => Math.abs(c.points)), 1);
-  return h("div", {},
-    h("div", { class: "breakdown" }, g.components.map((c) => {
-      const span = h("span", { class: c.points >= 0 ? "pos" : "neg" });
-      span.style.width = (Math.abs(c.points) / max) * 50 + "%";
-      return [h("div", {}, `${c.label} `, h("span", { class: "muted num" }, `×${fmt(c.count, c.count % 1 ? 1 : 0)}`)),
-        h("div", { class: "track", title: `${fmt(c.count, 1)} × ${c.weight} = ${fmt(c.points, 1)} pts` }, span),
-        h("div", { class: "num r" }, `${c.points > 0 ? "+" : ""}${fmt(c.points, 1)}`)];
-    })),
+  const sections = PARTS.filter(([key]) => g.parts[key]).map(([key, title, about]) => {
+    const comps = g.components.filter((c) => c.part === key);
+    return h("div", { class: "part" },
+      h("div", { class: "part-head" }, h("h3", {}, title), h("span", { class: "small muted" }, partSummary(key, g.parts[key], g))),
+      comps.length ? h("div", { class: "breakdown" }, comps.map((c) => {
+        const span = h("span", { class: c.points >= 0 ? "pos" : "neg" });
+        span.style.width = (Math.abs(c.points) / max) * 50 + "%";
+        return [h("div", {}, `${c.label} `, h("span", { class: "muted num" }, `×${fmt(c.count, c.count % 1 ? 1 : 0)}`)),
+          h("div", { class: "track", title: `${fmt(c.count, 1)} × ${c.weight} = ${fmt(c.points, 1)} pts` }, span),
+          h("div", { class: "num r" }, `${c.points > 0 ? "+" : ""}${fmt(c.points, 1)}`)];
+      })) : h("p", { class: "small muted" }, key === "backed" ? "None in this game: no official result had its play on video." : about));
+  });
+  return h("div", {}, sections,
     h("div", { class: "legend" }, h("span", {}, h("i", {}), "Adds to the score"), h("span", {}, h("i", { class: "neg" }), "Takes away")),
-    h("p", { class: "help" }, `${fmt(g.points, 1)} impact points in ${fmt(g.minutes, 1)} minutes seen → ${fmt(g.rate, 2)} per minute after blending with a typical game → score ${fmt(g.score)}.`));
+    h("p", { class: "help" }, g.basis === "video+nhl"
+      ? `The video and the box score are each compared with every other game, then blended into the score: ${fmt(g.score)}.`
+      : g.basis === "nhl" ? `The video didn't identify this player, so the score is the box score alone: ${fmt(g.score)}.`
+      : `No box score for this game yet, so the score is the video alone: ${fmt(g.score)}.`));
 }
 
 // --- Pages ---
@@ -513,7 +548,7 @@ function scoreHelp(d) {
   return h("div", { class: "card help" }, h("h2", {}, "How scores work"),
     h("dl", {},
       h("dt", {}, "Game score (0–100)"),
-      h("dd", {}, "Each play the video picks up is worth impact points (takeaway +2, good pass +1, turnover −2, …). Points per minute the player was seen are compared with every other player-game: 50 is a typical game, 73 one spread better, 88 two."),
+      h("dd", {}, "Video and NHL together. The video shows how a player played: movement, possession, pass quality and pressure (good pass +1, takeaway +2, turnover −2, …, per minute on screen). The NHL box score gives what they produced: goals, assists, shots, +/-, hits, blocks; goalies saves, goals against, the win. Results the video saw them create count extra: an assist in a game with good passes on video, a goal with its shots on video, points after winning the puck. Each is compared with every other game and blended: 50 is a typical game, 73 one spread better, 88 two. Without a box score, the video alone; without video, the box score alone."),
       h("dt", {}, "Form"),
       h("dd", {}, "The last 5 game scores, newer games and games the player was seen longer counting more. Trend: last 3 games against the ones before."),
       h("dt", {}, "Trade calls"),
@@ -643,8 +678,9 @@ async function pagePlayer(id) {
     selected = g;
     chartBox.replaceChildren(scoreChart(p.games, g.game_id, select));
     breakdownTitle.replaceChildren(`Score breakdown: ${g.label}, ${g.date}`);
-    breakdownBox.replaceChildren(h("div", { class: "tiles" }, tile("Score", fmt(g.score), `${g.confidence} confidence`),
-      tile("Minutes seen", fmt(g.minutes, 1)), tile("Impact points", fmt(g.points, 1))), breakdown(g));
+    breakdownBox.replaceChildren(h("div", { class: "tiles" }, tile("Score", fmt(g.score), BASIS[g.basis]),
+      tile("Official line", officialSummary(g.official), g.is_demo && g.official ? "made-up demo box score" : "from the NHL box score"),
+      tile("Minutes seen", fmt(g.minutes, 1), "on the video")), breakdown(g));
   };
 
   const memberOf = new Set(p.playlists.map((l) => l.id));
@@ -691,16 +727,21 @@ async function pagePlayer(id) {
     ? [["saves", "Saves"], ["goals_against", "GA"], ["goalie_recoveries", "Recov."]]
     : [["shots", "Shots"], ["shots_on_net", "On net"], ["passes_completed", "Passes"], ["good_passes", "Good"],
        ["takeaways", "TK"], ["interceptions", "INT"], ["defensive_plays", "Def."], ["turnovers", "TO"]];
+  const official = p.games.some((g) => g.official)
+    ? (goalie ? [["saves", "SV"], ["goals_against", "GA"], ["decision", "Dec"]] : [["goals", "G"], ["assists", "A"], ["plus_minus", "+/-"]])
+    : [];
   const logHead = h("tr", {}, h("th", {}, "Date"), h("th", {}, "Game"), h("th", { class: "r" }, "Score"),
-    h("th", { class: "r" }, "Min seen"), cols.map(([, l]) => h("th", { class: "r" }, l)));
+    official.map(([, l]) => h("th", { class: "r", title: "From the NHL box score" }, l)),
+    h("th", { class: "r" }, "Min seen"), cols.map(([, l]) => h("th", { class: "r", title: "From the video" }, l)));
   const logRows = p.games.map((g) => h("tr", { class: "clickable",
     onclick: () => { select(g); breakdownTitle.scrollIntoView({ behavior: "smooth", block: "center" }); } },
     h("td", { class: "num" }, g.date),
     h("td", {}, h("a", { href: `#/game/${g.game_id}`, onclick: (e) => e.stopPropagation() }, g.label),
       g.is_demo ? [" ", h("span", { class: "badge" }, "Demo")] : null),
     h("td", { class: "r num" }, h("b", {}, fmt(g.score))),
-    h("td", { class: "r num" }, fmt(g.minutes, 1)),
-    cols.map(([k]) => h("td", { class: "r num" }, fmt(g.stats[k] || 0)))));
+    official.map(([k]) => h("td", { class: "r num" }, g.official ? (g.official[k] ?? "–") : "–")),
+    h("td", { class: "r num" }, g.basis === "nhl" ? "–" : fmt(g.minutes, 1)),
+    cols.map(([k]) => h("td", { class: "r num" }, g.basis === "nhl" ? "–" : fmt(g.stats[k] || 0)))));
   body.push(h("div", { class: "card" }, h("div", { class: "card-head" }, h("h2", {}, "Game log")),
     h("div", { class: "table-wrap" }, h("table", {}, h("thead", {}, logHead), h("tbody", {}, logRows)))));
   select(selected);
@@ -753,7 +794,8 @@ async function pageGame(id) {
         h("tbody", {}, players.map((p) => h("tr", { class: "clickable", onclick: () => go(`#/player/${p.player_id}`) },
           h("td", { class: "num muted" }, p.number ?? ""), h("td", { class: "name" }, p.name),
           h("td", {}, POS_SHORT[p.position] || ""), h("td", {}, meter(p.score)),
-          h("td", { class: "r num" }, fmt(p.minutes, 1)),
+          h("td", { class: "r num", title: p.basis === "nhl" ? "Not identified on the video: scored from the box score" : null },
+            p.basis === "nhl" ? "–" : fmt(p.minutes, 1)),
           hasLines ? officialCells(p.official) : null)))))))) ];
 }
 

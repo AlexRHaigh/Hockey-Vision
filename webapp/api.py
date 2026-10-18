@@ -31,14 +31,15 @@ def scored(con):
     with _cache_lock:
         if _cache.get("key") == key:
             return _cache["value"]
-    rows = db.all_game_stats(con)
-    points = [(r["role"], *scoring_inputs(r)) for r in rows]
-    calibration = scoring.calibrate(points)
+    rows = db.all_player_games(con)
+    calibration = scoring.calibrate([("goalie" if r["role"] == "goalie" else "skater",
+                                      scoring.calibration_inputs(r["stats"], r["role"], r["line"])) for r in rows])
     by_player, by_game = {}, {}
     for r in rows:
         entry = {"game_id": r["game_id"], "date": r["date"], "label": r["label"], "away": r["away"], "home": r["home"],
                  "is_demo": bool(r["is_demo"]), "team": r["team"], "role": r["role"], "player_id": r["player_id"],
-                 **scoring.game_score(r["stats"], r["role"], calibration), "stats": r["stats"]}
+                 **scoring.game_score(r["stats"], r["role"], calibration, r["line"]), "stats": r["stats"] or {},
+                 "official": r["line"]}
         by_player.setdefault(r["player_id"], []).append(entry)
         by_game.setdefault(r["game_id"], []).append(entry)
     value = {"by_player": by_player, "by_game": by_game, "calibration": calibration,
@@ -46,10 +47,6 @@ def scored(con):
     with _cache_lock:
         _cache.update(key=key, value=value)
     return value
-
-
-def scoring_inputs(row):
-    return scoring.impact_points(row["stats"], row["role"])[0], scoring.minutes_detected(row["stats"])
 
 
 def _player(row, data, favorites=frozenset(), seasons=None):
@@ -171,15 +168,12 @@ def game(con, params, body, game_id):
         raise ApiError(404, f"No game {game_id}")
     names = {r["player_id"]: dict(r) for r in con.execute("SELECT player_id, name, number, position FROM players")}
     entries = sorted(scored(con)["by_game"].get(game_id, []), key=lambda e: -e["score"])
-    official, lines = None, {}
+    official = None
     if row["nhl_game_id"]:
         box = con.execute("SELECT data FROM nhl_boxscores WHERE nhl_game_id = ?", (row["nhl_game_id"],)).fetchone()
         official = json.loads(box["data"]) if box else None
-        lines = {r["player_id"]: json.loads(r["data"]) for r in con.execute(
-            "SELECT player_id, data FROM nhl_boxscore_lines WHERE nhl_game_id = ?", (row["nhl_game_id"],))}
     return {**dict(row), "is_demo": bool(row["is_demo"]), "official": official,
-            "players": [{**{k: v for k, v in e.items() if k != "stats"}, **names.get(e["player_id"], {}),
-                         "stats": e["stats"], "official": lines.get(e["player_id"])} for e in entries]}
+            "players": [{**e, **names.get(e["player_id"], {})} for e in entries]}
 
 
 def delete_game(con, params, body, game_id):

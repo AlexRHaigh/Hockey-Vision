@@ -238,6 +238,8 @@ td.name small { display: block; font-weight: 400; color: var(--text-3); }
 #tooltip strong { font-size: 1rem; font-variant-numeric: tabular-nums; }
 
 /* Breakdown */
+.part + .part { margin-top: 16px; padding-top: 14px; border-top: 1px solid var(--border); }
+.part-head { display: flex; justify-content: space-between; align-items: baseline; gap: 12px; flex-wrap: wrap; margin-bottom: 8px; }
 .breakdown { display: grid; grid-template-columns: minmax(120px, 180px) 1fr 56px; gap: 6px 10px; align-items: center; font-size: 0.85rem; }
 .breakdown .track { position: relative; height: 12px; }
 .breakdown .track::before { content: ""; position: absolute; left: 50%; top: -2px; bottom: -2px; width: 1px; background: var(--text-3); }
