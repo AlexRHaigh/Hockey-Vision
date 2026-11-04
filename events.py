@@ -520,6 +520,8 @@ def analyze_clip(clip, frame_rows, player_rows, puck_rows, tracks):
             continue
         if shots[k] is not None:
             continue  # what happens after a shot is its outcome (save, rebound, block)
+        if p["pid"] == nxt["pid"]:
+            continue  # regaining one's own puck is not a pass
         if info[p["pid"]]["team"] == info[nxt["pid"]]["team"]:
             if _dist(frames[p["end_i"]]["puck"], frames[nxt["start_i"]]["puck"]) >= MIN_PASS_FT:
                 ended_by[k] = c.pass_(p, nxt, shots[k + 1] is not None)
