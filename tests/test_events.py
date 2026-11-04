@@ -116,6 +116,21 @@ class EventTests(unittest.TestCase):
         self.assertIn("beat_defenders", p["good_reasons"])
         self.assertGreater(p["forward_ft"], 30)
 
+    def test_regaining_own_puck_is_not_a_pass(self):
+        s = Scene(210)
+        # SJS #7 loses the puck, skates 20 ft and gets it back 2.5 s later: too long a gap to merge.
+        s.place("a7", range(0, 30), (-10, 0))
+        s.place("a7", range(30, 210), (10, 0))
+        s.carry("a7", range(0, 30))
+        s.carry("a7", range(180, 210))
+        rows, evs, info, _ = s.analyze()
+        self.assertEqual(len(rows), 2)
+        self.assertEqual(of_type(evs, "pass"), [])
+        self.assertEqual(rows[0]["ended_by"], "lost_track")
+        stats = {r["player_id"]: r for r in events.player_stats(info, evs, rows, {})}
+        self.assertEqual(stats["SJS #7"]["passes_completed"], 0)
+        self.assertEqual(stats["SJS #7"]["passes_received"], 0)
+
     def test_takeaway(self):
         s = Scene(120)
         s.move("a7", range(0, 120), (0, 0), (30, 0))
