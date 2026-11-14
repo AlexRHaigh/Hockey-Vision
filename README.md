@@ -8,6 +8,9 @@ turnovers and defensive plays. The output is machine-readable data: per-frame an
 tables, an event list with times, and a `game_report.json` written for a language model to read
 and turn into feedback.
 
+> This is the **Python implementation** (`Python-Implementation` branch). The `main` branch has the
+> same pipeline in Rust (`hockey-vision run`), about 5x faster on a Mac, with byte-identical exports.
+
 It runs on a Mac or a CUDA GPU, and on an NVIDIA Jetson Orin Nano with TensorRT engines (see
 [jetson/README.md](jetson/README.md)).
 
@@ -198,7 +201,6 @@ reach the server shares the favourites and playlists.
 | `CV_Models/` | The models (see [CV_Models/README.md](CV_Models/README.md)) |
 | `assets/` | The rink template image (for the optional videos) |
 | `tests/` | Tests |
-| `rust/` | The whole pipeline in Rust (`hockey-vision run`, ~5x faster on a Mac) and the analysis behind it: [rust/README.md](rust/README.md), [rust/ANALYSIS.md](rust/ANALYSIS.md) |
 
 ## Jersey numbers
 
