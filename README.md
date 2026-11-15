@@ -9,7 +9,9 @@ tables, an event list with times, and a `game_report.json` written for a languag
 and turn into feedback.
 
 It runs on a Mac or a CUDA GPU, and on an NVIDIA Jetson Orin Nano with TensorRT engines (see
-[jetson/README.md](jetson/README.md)).
+[jetson/README.md](jetson/README.md)). The whole pipeline is also ported to Rust: one binary,
+`hockey-vision run`, does every stage about 5x faster on a Mac and writes the same files (see
+[Rust](#rust)).
 
 ## Design
 
@@ -85,6 +87,48 @@ Annotated videos are optional outputs, for checking the models by eye:
 `homography.py --save-video` writes `side_by_side.mp4` with the top-down rink beside the video
 (`--debug` adds `radar.mp4` and `overlay.mp4`).
 
+`homography.py` treats a singular rink fit as no fit for that frame, instead of failing the whole
+clip.
+
+Or run all three stages in Rust, after the [Rust setup](#rust):
+
+```bash
+rust/target/release/hockey-vision run videos/<clip>.mp4 --teams SJS MTL --device coreml --time
+```
+
+## Rust
+
+`rust/` is the whole video-to-report pipeline in Rust, in one binary. Each command replaces one
+Python stage and reads and writes the same files, so stages can be swapped and compared one at a
+time. The Python pipeline is unchanged and stays the reference. Training, `export_engines.py`,
+`fetch_roster.py` and the web app stay in Python.
+
+| Command | Replaces | vs Python (Apple M5, 600-frame 1080p60 clips) |
+|---|---|---|
+| `hockey-vision detect` | `run_models.py` | 4.5x faster with CoreML (50–54 vs 235 ms/frame); same output up to model float noise |
+| `hockey-vision homography` | `homography.py` | ~20x faster on one core, ~90x on all; same fit on 96–100% of frames |
+| `hockey-vision export` | `export_data.py`, `events.py` | 10–15x faster; byte-identical output |
+| `hockey-vision run` | `jetson/run_clip.sh` | 37 s vs 178 s per clip (4.8x), up to 7x on a quiet machine |
+
+```bash
+python rust/export_onnx.py                   # once: the five models as ONNX -> CV_Models/Models/onnx/
+cd rust
+cargo build --release --features coreml      # on a Mac; leave out --features coreml elsewhere
+```
+
+It needs Rust 1.81 or newer and `ffmpeg`/`ffprobe` on the PATH. `detect` and `run` take
+`run_models.py`'s options plus `--device cpu|coreml`, `--threads`, `--sequential` and `--time`.
+Not ported yet: images, `--width`, the annotated videos, and TensorRT engines for the Jetson; use
+the Python scripts for those.
+
+The workspace has three crates: `hv-core` (the pipeline without the models: OpenCV-exact image
+steps, Ultralytics NMS and ByteTrack, jersey votes, rosters, the rink fit, export and events, and
+CPython 3.9's float formatting so the tables match byte for byte), `hv-infer` (ONNX Runtime models,
+an ffmpeg frame reader and the detect loop, which runs the full-frame models in parallel and
+overlaps frames) and `hv-cli` (the `hockey-vision` binary). `rust/bench/` has the parity and timing
+scripts. [rust/README.md](rust/README.md) has the full parity and speed measurements, and
+[rust/ANALYSIS.md](rust/ANALYSIS.md) the analysis and plan behind the port.
+
 ## Output
 
 `outputs/<clip>/export/`:
@@ -104,7 +148,8 @@ The events (`events.py` has the exact rules and thresholds):
   the other team's goalie gets it straight after a release near the net. Outcomes: `saved`,
   `blocked`, `possible_goal`, `rebound_recovered`, `recovered_by_opponent`, `unknown`.
 - **Passes**: the puck goes from one player to a teammate. `good` passes say why: advanced the
-  puck, beat defenders, relieved pressure, found an open teammate, or led to a shot.
+  puck, beat defenders, relieved pressure, found an open teammate, or led to a shot. A player
+  getting their own puck back isn't a pass.
 - **Turnovers**: the other team gets the puck: a `takeaway` (stolen off the carrier), an
   `interception`, or a `goalie_recovery`.
 - **Defensive plays**: an opponent close to the carrier forces them to backtrack, slows them
@@ -197,8 +242,21 @@ reach the server shares the favourites and playlists.
 | `video_io.py` | Background-thread video decoding (hardware decoder when available), camera-cut detection, background output writing |
 | `CV_Models/` | The models (see [CV_Models/README.md](CV_Models/README.md)) |
 | `assets/` | The rink template image (for the optional videos) |
-| `tests/` | Tests |
-| `rust/` | The whole pipeline in Rust (`hockey-vision run`, ~5x faster on a Mac) and the analysis behind it: [rust/README.md](rust/README.md), [rust/ANALYSIS.md](rust/ANALYSIS.md) |
+| `tests/` | Tests, including `test_rust_port.py` (the Rust port against the Python pipeline) |
+| `rust/` | The whole pipeline in Rust (`hockey-vision run`, ~5x faster on a Mac; see [Rust](#rust)) and the analysis behind it: [rust/README.md](rust/README.md), [rust/ANALYSIS.md](rust/ANALYSIS.md) |
+
+## Tests
+
+```bash
+python -m unittest discover -s tests -v                             # everything
+python -m unittest discover -s tests -p "test_rust_port.py" -v      # Rust vs the Python pipeline (~70 s)
+(cd rust && cargo test --release)                                   # Rust unit tests
+```
+
+`test_rust_port.py` builds the Rust binary and checks each part against the Python it replaces:
+export, NMS, ByteTrack, jersey numbers, rosters and OpenCV's image steps bit for bit; the rink fit
+and detection within tolerance. The detection tests are skipped without the ONNX models and a test
+video (`HV_TEST_VIDEO`).
 
 ## Jersey numbers
 
