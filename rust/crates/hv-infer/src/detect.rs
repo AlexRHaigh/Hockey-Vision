@@ -60,12 +60,22 @@ pub struct Config {
     pub roster: Option<Roster>,
     pub jersey_stride: usize,
     pub rink_stride: usize,
+    /// Read every frame_step-th frame of the video (1: every frame). The output is then a video
+    /// at fps / frame_step: frame numbers count the frames read, time_s stays the video's time.
+    pub frame_step: usize,
     pub max_frames: usize,
     pub output: PathBuf,
     pub device: Device,
     pub threads: usize,
     /// Run the full-frame models at the same time, and overlap consecutive frames.
     pub parallel: bool,
+    /// (height, width) the number model reads each crop at (default 640x640).
+    pub number_shape: (usize, usize),
+    /// Pad every crop to exactly `number_shape` and read a frame's crops in one batch (one
+    /// TensorRT engine for batches of 1..NUMBER_BATCH), instead of the Python-identical way:
+    /// minimal padding when a batch's crops share a shape, otherwise square, one crop at a time
+    /// on CoreML / TensorRT.
+    pub number_batched: bool,
 }
 
 /// One output box: float32 like Ultralytics' tensors, plus the track id when tracked.
@@ -210,13 +220,13 @@ impl Detector {
         let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let out_dir = cfg.output.join(&stem);
         std::fs::create_dir_all(&out_dir).map_err(|e| format!("{}: {e}", out_dir.display()))?;
-        let mut video = FrameReader::open(path, cfg.max_frames)?;
+        let mut video = FrameReader::open(path, cfg.max_frames, cfg.frame_step)?;
         eprintln!(
             "  decoding with ffmpeg ({}{})",
             video.info.pix_fmt,
             if video.exact { ", frames identical to OpenCV's" } else { ", converted by ffmpeg: not bit-identical to OpenCV" }
         );
-        let fps = video.info.fps;
+        let fps = video.info.fps / cfg.frame_step.max(1) as f64;
         let total = if cfg.max_frames > 0 && (video.info.frames == 0 || video.info.frames > cfg.max_frames) {
             cfg.max_frames
         } else {
@@ -527,18 +537,22 @@ fn read_jerseys(
     }
     let mut results: Vec<Vec<Det>> = vec![];
     let mut model_time = Duration::ZERO;
+    let (nh, nw) = cfg.number_shape;
     for batch in crops.chunks(NUMBER_BATCH) {
         // Ultralytics pads to a square unless every image in the batch has the same shape.
-        let same = batch.iter().all(|c| (c.3.w, c.3.h) == (batch[0].3.w, batch[0].3.h));
-        let lbs: Vec<_> =
-            batch.iter().map(|c| letterbox_params(c.3.w, c.3.h, (NUMBER_IMGSZ, NUMBER_IMGSZ), same, model.stride)).collect();
+        // Batched: always exactly number_shape, so every batch runs on one fixed-size engine.
+        let same = !cfg.number_batched && batch.iter().all(|c| (c.3.w, c.3.h) == (batch[0].3.w, batch[0].3.h));
+        let lbs: Vec<_> = batch.iter().map(|c| letterbox_params(c.3.w, c.3.h, (nh, nw), same, model.stride)).collect();
         let mut input = vec![];
         for (c, lb) in batch.iter().zip(&lbs) {
             letterbox_into(&c.3, lb, &mut input);
         }
         let (ih, iw) = lbs[0].shape;
         let tm = Instant::now();
-        let (shape, out) = if cfg.device.uses_static() && (ih, iw) == (NUMBER_IMGSZ, NUMBER_IMGSZ) {
+        let (shape, out) = if cfg.number_batched {
+            model.allow_batch(ih, iw, NUMBER_BATCH);
+            model.run(input, batch.len(), ih, iw)?
+        } else if cfg.device.uses_static() && (ih, iw) == (nh, nw) {
             // CoreML / TensorRT: one crop at a time through the fixed-shape session (much faster
             // than a dynamic batch, and one engine instead of one per batch size).
             model.allow_static(1, ih, iw);

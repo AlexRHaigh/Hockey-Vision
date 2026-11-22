@@ -15,6 +15,10 @@ use serde_json::{json, Map, Value};
 
 pub const WARMUP_FRAMES: usize = 30;
 
+fn detect_batch() -> usize {
+    hv_infer::detect::NUMBER_BATCH
+}
+
 /// n, mean, std, min, p50, p90, p95, p99, max of the finite values.
 fn stats(values: impl IntoIterator<Item = f64>) -> Value {
     let mut v: Vec<f64> = values.into_iter().filter(|x| x.is_finite()).collect();
@@ -110,6 +114,7 @@ pub fn build(
     profiles: &[String],
 ) -> Value {
     let f = &t.per_frame;
+    let step = settings["frame_step"].as_u64().unwrap_or(1).max(1) as usize;
     let warm: &[FrameStat] = if f.len() > WARMUP_FRAMES * 2 { &f[WARMUP_FRAMES..] } else { f };
     let frames = t.frames.max(1) as f64;
     let wall = t.total.as_secs_f64();
@@ -182,7 +187,10 @@ pub fn build(
             "path": video_path.display().to_string(),
             "width": info.width, "height": info.height, "fps": info.fps,
             "frames_in_file": info.frames, "pix_fmt": info.pix_fmt,
-            "duration_s": if info.fps > 0.0 { t.frames as f64 / info.fps } else { 0.0 },
+            "frame_step": step,
+            // The frames read, at fps / frame_step: what real time means for this run.
+            "processed_fps": info.fps / step as f64,
+            "duration_s": if info.fps > 0.0 { (t.frames * step) as f64 / info.fps } else { 0.0 },
         },
         "load": {
             "wall_s": secs(load_wall),
@@ -190,7 +198,7 @@ pub fn build(
                 "model": l.model,
                 "dynamic_session_s": secs(l.dynamic),
                 // With TensorRT: building the engine (first run) or loading it from the cache.
-                "fixed_shape_sessions": l.fixed.iter().map(|((n, h, w), d)| json!({"shape": format!("{n}x3x{h}x{w}"), "s": secs(*d)})).collect::<Vec<_>>(),
+                "fixed_shape_sessions": l.fixed.iter().map(|((n, h, w), d)| json!({"shape": if *n == 0 { format!("1-{}x3x{h}x{w}", detect_batch()) } else { format!("{n}x3x{h}x{w}") }, "s": secs(*d)})).collect::<Vec<_>>(),
             })).collect::<Vec<_>>(),
         },
         "detect": {
@@ -198,7 +206,8 @@ pub fn build(
             "wall_s": secs(t.total),
             "fps": (fps * 100.0).round() / 100.0,
             "ms_per_frame": (wall * 1e6 / frames).round() / 1000.0,
-            "real_time_factor": if info.fps > 0.0 { (fps / info.fps * 1000.0).round() / 1000.0 } else { 0.0 },
+            // Frames done per second over the frames needed per second (fps / frame_step).
+            "real_time_factor": if info.fps > 0.0 { (fps * step as f64 / info.fps * 1000.0).round() / 1000.0 } else { 0.0 },
             "steady_fps": steady.map(|v| (v * 100.0).round() / 100.0),
             "warmup_frames_excluded": f.len() - warm.len(),
             "first_frame_s": f.first().map(|s| s.done_s),

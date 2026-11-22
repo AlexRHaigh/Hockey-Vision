@@ -303,7 +303,9 @@ def render(s):
     row("End-to-end FPS (detect + rink fit + export)", lambda p: f(p["run"]["end_to_end"]["fps"], 2))
     row("Detect FPS", lambda p: f(p["run"]["detect"]["fps"], 2))
     row("Steady-state FPS (after warm-up)", lambda p: f(p["run"]["detect"]["steady_fps"], 2))
-    row("Real-time factor (vs video fps)", lambda p: f(p["run"]["detect"]["real_time_factor"], 3, "x"))
+    row("Frame step (every Nth frame read)", lambda p: f(p["run"]["video"].get("frame_step", 1), 0))
+    row("Frames needed per second for real time", lambda p: f(p["run"]["video"]["fps"] / p["run"]["video"].get("frame_step", 1), 2))
+    row("Real-time factor (FPS / frames needed per second; 1.0 = real time)", lambda p: f(p["run"]["detect"]["real_time_factor"], 3, "x"))
     row("Frame interval p50 / p95 / p99 ms", lambda p: "{} / {} / {}".format(*(f(p["run"]["detect"]["frame_interval_ms"][k], 2) for k in ("p50", "p95", "p99"))))
     row("First frame (engines cached) s", lambda p: f(p["run"]["detect"]["first_frame_s"], 2))
     row("Cold run: engine build (or cache load if already built) s", lambda p: f(sum(x["s"] for m in p["cold_load"]["models"] for x in m["fixed_shape_sessions"]), 1))
@@ -383,7 +385,9 @@ def render(s):
         L += ["", "## Resume line", "",
               f"... via TensorRT ({n.upper()}) on an NVIDIA Jetson Orin Nano at {p['run']['end_to_end']['fps']:.0f} FPS end to end"
               + (f" ({e['board_w_mean']:.1f} W, {e['fps_per_watt']:.1f} FPS/W)" if e.get("board_w_mean") else "")
-              + f" on 1080p{round(p['run']['video']['fps'])} video"]
+              + f" on 1080p{round(p['run']['video']['fps'])} video"
+              + (f" (every {p['run']['video']['frame_step']}th frame, {p['run']['detect']['real_time_factor']:.2f}x real time)"
+                 if p['run']['video'].get('frame_step', 1) > 1 else "")]
     return "\n".join(L) + "\n"
 
 

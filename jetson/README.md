@@ -59,3 +59,13 @@ with Ctrl-b then d, and later `tmux attach -t hv-bench` or `tail -f bench_result
 It writes `bench_results/<timestamp>/` (with the whole console output in `bench.log`) and ends with `summary.md` and `summary.json`
 (`python3 jetson/summarize.py bench_results/<timestamp>` makes them again). See the comment at
 the top of `bench.sh` for every option and file.
+
+Speed only, reading every 2nd frame (no accuracy check, profile or trtexec):
+
+```bash
+jetson/bench_detached.sh videos/<video>.mp4 --precisions fp32 --quality-frames 0 --profile-frames 0 \
+    --no-trtexec -- --frame-step 2
+```
+
+With `--frame-step N`, real time is the video's fps / N, and the summary's real-time factor is
+measured against that.

@@ -31,8 +31,10 @@ const USAGE: &str = "usage:
   hockey-vision export <clip folder>... [--output DIR] [--time]
   hockey-vision detect <video or folder> [--models NAME...] [--conf X] [--puck-conf X] [--output DIR]
       [--max-frames N] [--teams TEAM_A TEAM_B] [--roster CSV] [--jersey-stride N] [--rink-stride N]
+      [--frame-step N]
       [--weights NAME=PATH...] [--models-dir DIR] [--device cpu|coreml|tensorrt]
       [--precision fp32|tf32|fp16] [--threads N] [--sequential] [--time] [--metrics]
+      [--number-imgsz N | --number-shape HxW] [--number-batch]
   hockey-vision run <video or folder> [detect options]   (detect + homography + export)";
 
 fn main() -> ExitCode {
@@ -192,12 +194,13 @@ struct Opts {
 fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, Opts), Error> {
     let mut it = args.into_iter().peekable();
     let (mut metrics, mut precision) = (false, Precision::Fp32);
+    let (mut number_shape, mut number_batched) = ((detect::NUMBER_IMGSZ, detect::NUMBER_IMGSZ), false);
     let mut source = None;
     let mut models: Vec<String> = detect::MODEL_NAMES.iter().map(|s| s.to_string()).collect();
     let (mut conf, mut puck_conf, mut imgsz) = (0.25f32, detect::DEFAULT_PUCK_CONF, 640usize);
     let (mut output, mut max_frames) = (PathBuf::from("outputs"), 0usize);
     let (mut teams, mut roster) = (None, PathBuf::from("rosters/nhl_active_players.csv"));
-    let (mut jersey_stride, mut rink_stride) = (5usize, 1usize);
+    let (mut jersey_stride, mut rink_stride, mut frame_step) = (5usize, 1usize, 1usize);
     let (mut weights, mut models_dir) = (vec![], PathBuf::from("CV_Models/Models/onnx"));
     let (mut device, mut threads, mut time, mut sequential) = (Device::Cpu, 0usize, false, false);
     let num = |v: String, flag: &str| v.parse::<f64>().map_err(|_| usage(format!("bad {flag} value {v}")));
@@ -221,6 +224,7 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, Opts), Error
             "--roster" => roster = PathBuf::from(next_value(&mut it, &a)?),
             "--jersey-stride" => jersey_stride = num(next_value(&mut it, &a)?, &a)? as usize,
             "--rink-stride" => rink_stride = num(next_value(&mut it, &a)?, &a)? as usize,
+            "--frame-step" => frame_step = num(next_value(&mut it, &a)?, &a)? as usize,
             "--weights" => {
                 while let Some(w) = it.next_if(|v| !v.starts_with("--")) {
                     weights.push(w);
@@ -244,6 +248,16 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, Opts), Error
                 }
             }
             "--metrics" => metrics = true,
+            "--number-imgsz" => {
+                let n = num(next_value(&mut it, &a)?, &a)? as usize;
+                number_shape = (n, n);
+            }
+            "--number-shape" => {
+                let v = next_value(&mut it, &a)?;
+                let (h, w) = v.split_once('x').ok_or_else(|| usage(format!("--number-shape takes HxW, got {v}")))?;
+                number_shape = (num(h.into(), &a)? as usize, num(w.into(), &a)? as usize);
+            }
+            "--number-batch" => number_batched = true,
             "--threads" => threads = num(next_value(&mut it, &a)?, &a)? as usize,
             "--time" => time = true,
             "--sequential" => sequential = true,
@@ -310,9 +324,13 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, Opts), Error
         "weights": paths.iter().map(|(k, v)| (k.clone(), v.display().to_string())).collect::<std::collections::BTreeMap<_, _>>(),
         "conf": conf, "puck_conf": puck_conf, "imgsz": imgsz,
         "teams": teams.as_ref().map(|t| t.to_vec()),
-        "jersey_stride": jersey_stride, "rink_stride": rink_stride.max(1), "max_frames": max_frames,
+        "jersey_stride": jersey_stride, "rink_stride": rink_stride.max(1), "frame_step": frame_step.max(1), "max_frames": max_frames,
         "threads": threads, "parallel": !sequential,
+        "number_shape": format!("{}x{}", number_shape.0, number_shape.1), "number_batched": number_batched,
     });
+    if number_shape.0 % 32 != 0 || number_shape.1 % 32 != 0 {
+        return Err(usage("--number-imgsz / --number-shape must be multiples of 32"));
+    }
     let cfg = Config {
         models,
         weights: paths,
@@ -322,11 +340,14 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, Opts), Error
         roster,
         jersey_stride,
         rink_stride: rink_stride.max(1),
+        frame_step: frame_step.max(1),
         max_frames,
         output,
         device,
         threads,
         parallel: !sequential,
+        number_shape,
+        number_batched,
     };
     Ok((inputs, cfg, Opts { time, metrics, settings }))
 }

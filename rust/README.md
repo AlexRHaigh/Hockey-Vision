@@ -63,7 +63,8 @@ $B export outputs/<clip>                                            # export_dat
 plus `--device cpu|coreml|tensorrt`, `--precision fp32|tf32|fp16` (TensorRT only),
 `--threads N` (default: performance cores), `--models-dir`, `--sequential` (no overlapping; same
 output), `--time` (per-stage timings) and `--metrics` (`run_metrics.json` and `frame_times.csv`
-next to the outputs). `--device tensorrt` needs a build with `--features tensorrt`, on an NVIDIA
+next to the outputs). `--frame-step N` reads every Nth frame (ffmpeg still decodes them all), so
+the output is a video at fps / N and real time means fps / N frames a second. `--device tensorrt` needs a build with `--features tensorrt`, on an NVIDIA
 Jetson: see [jetson/README.md](../jetson/README.md).
 
 Not ported: images (only videos), `--width` and the `--save-video` / `--per-model` / `--debug`

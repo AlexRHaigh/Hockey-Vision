@@ -93,11 +93,17 @@ pub struct FrameReader {
 }
 
 impl FrameReader {
-    pub fn open(path: &Path, max_frames: usize) -> Result<Self, String> {
+    /// `step` > 1 keeps every step-th frame (0, step, 2*step, ...): ffmpeg still decodes every
+    /// frame, but drops the others before converting and sending them. `max_frames` counts the
+    /// frames kept.
+    pub fn open(path: &Path, max_frames: usize, step: usize) -> Result<Self, String> {
         let info = probe(path)?;
         let exact = info.pix_fmt == "yuv420p" && info.width % 2 == 0 && info.height % 2 == 0;
         let mut cmd = Command::new("ffmpeg");
         cmd.args(["-v", "error", "-nostdin", "-i"]).arg(path);
+        if step > 1 {
+            cmd.args(["-vf", &format!("select=not(mod(n\\,{step}))")]);
+        }
         if max_frames > 0 {
             cmd.args(["-frames:v", &max_frames.to_string()]);
         }

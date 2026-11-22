@@ -71,6 +71,9 @@ pub struct Model {
     dynamic: Session,
     static_sessions: HashMap<(usize, usize, usize), Session>,
     static_shapes: Vec<(usize, usize, usize)>,
+    /// (h, w, max batch): any batch of 1..=max images of (h, w) runs on a fixed-size session
+    /// (with TensorRT one engine with a batch profile; with CoreML one session per batch size).
+    batch_shapes: Vec<(usize, usize, usize)>,
     pub names: Vec<String>,
     pub stride: usize,
     input: String,
@@ -163,6 +166,7 @@ impl Model {
             dynamic,
             static_sessions: HashMap::new(),
             static_shapes: vec![],
+            batch_shapes: vec![],
             names,
             stride,
             input,
@@ -182,17 +186,33 @@ impl Model {
         self.static_shapes.contains(&(n, h, w))
     }
 
-    fn static_session(&mut self, key: (usize, usize, usize)) -> Result<&mut Session, String> {
+    /// With CoreML or TensorRT, run batches of 1..=max images of (h, w) on fixed-size sessions.
+    pub fn allow_batch(&mut self, h: usize, w: usize, max: usize) {
+        match self.device {
+            Device::Cpu => {}
+            Device::CoreMl => (1..=max).for_each(|n| self.allow_static(n, h, w)),
+            Device::TensorRt(_) => {
+                if !self.batch_shapes.contains(&(h, w, max)) {
+                    self.batch_shapes.push((h, w, max));
+                }
+            }
+        }
+    }
+
+    /// A fixed-shape session: key (n, h, w), or (0, h, w) for a batch-profile session taking
+    /// 1..=max images (TensorRT only).
+    fn static_session(&mut self, key: (usize, usize, usize), max_batch: usize) -> Result<&mut Session, String> {
         if !self.static_sessions.contains_key(&key) {
             let t0 = Instant::now();
             let (n, h, w) = key;
-            let tag = format!("{}_{n}x{h}x{w}", stem(&self.path));
+            let tag = if n == 0 { format!("{}_b1-{max_batch}x{h}x{w}", stem(&self.path)) } else { format!("{}_{n}x{h}x{w}", stem(&self.path)) };
             let b = builder(self.threads, &tag)
-                .and_then(|b| b.with_dimension_override("batch", n as i64))
+                .and_then(|b| if n > 0 { b.with_dimension_override("batch", n as i64) } else { Ok(b) })
                 .and_then(|b| b.with_dimension_override("height", h as i64))
                 .and_then(|b| b.with_dimension_override("width", w as i64))
                 .map_err(|e| format!("{}: {e}", self.path.display()))?;
-            let s = self.static_providers(b, &tag)?.commit_from_file(&self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
+            let profile = (n == 0).then_some((h, w, max_batch));
+            let s = self.static_providers(b, &tag, profile)?.commit_from_file(&self.path).map_err(|e| format!("{}: {e}", self.path.display()))?;
             self.static_load_times.push((key, t0.elapsed()));
             self.static_sessions.insert(key, s);
         }
@@ -200,7 +220,7 @@ impl Model {
     }
 
     #[allow(unused_variables)]
-    fn static_providers(&self, b: SessionBuilder, tag: &str) -> Result<SessionBuilder, String> {
+    fn static_providers(&self, b: SessionBuilder, tag: &str, profile: Option<(usize, usize, usize)>) -> Result<SessionBuilder, String> {
         let err = |e: ort::Error| format!("{}: {e}", self.path.display());
         match self.device {
             #[cfg(feature = "coreml")]
@@ -235,6 +255,16 @@ impl Model {
                     .with_engine_cache_prefix(format!("{tag}_{}", precision.name()))
                     .with_timing_cache(true)
                     .with_timing_cache_path(&cache);
+                // A batch profile: one engine for 1..=max images (optimised for 4, about a frame's crops).
+                let ep = match profile {
+                    Some((h, w, max)) => {
+                        let i = &self.input;
+                        ep.with_profile_min_shapes(format!("{i}:1x3x{h}x{w}"))
+                            .with_profile_opt_shapes(format!("{i}:{}x3x{h}x{w}", max.min(4)))
+                            .with_profile_max_shapes(format!("{i}:{max}x3x{h}x{w}"))
+                    }
+                    None => ep,
+                };
                 b.with_execution_providers([ep.build().error_on_failure(), cuda_ep()]).map_err(err)
             }
             _ => Err(format!("{}: no fixed-shape sessions on {:?}", self.path.display(), self.device)),
@@ -245,7 +275,13 @@ impl Model {
     /// its shape ([n, 4 + classes, anchors]).
     pub fn run(&mut self, data: Vec<f32>, n: usize, h: usize, w: usize) -> Result<(Vec<usize>, Vec<f32>), String> {
         let input_name = self.input.clone();
-        let session = if self.is_static(n, h, w) { self.static_session((n, h, w))? } else { &mut self.dynamic };
+        let session = if let Some(&(_, _, max)) = self.batch_shapes.iter().find(|s| (s.0, s.1) == (h, w) && n <= s.2) {
+            self.static_session((0, h, w), max)?
+        } else if self.is_static(n, h, w) {
+            self.static_session((n, h, w), 0)?
+        } else {
+            &mut self.dynamic
+        };
         let input = Tensor::from_array(([n, 3, h, w], data.into_boxed_slice())).map_err(|e| e.to_string())?;
         let outputs = session.run(ort::inputs![input_name.as_str() => input]).map_err(|e| e.to_string())?;
         let (shape, values) = outputs[0].try_extract_tensor::<f32>().map_err(|e| e.to_string())?;
