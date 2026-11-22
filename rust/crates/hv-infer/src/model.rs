@@ -101,6 +101,15 @@ fn stem(path: &Path) -> String {
 
 /// A session builder, profiling into $HV_ORT_PROFILE/<tag> when that is set.
 fn builder(threads: usize, profile_tag: &str) -> ort::Result<SessionBuilder> {
+    // `ort` only creates its environment (which registers ONNX Runtime's default logger) in
+    // `commit_from_file`, but `with_execution_providers` loads the CUDA / TensorRT provider
+    // libraries before that, and ONNX Runtime 1.24 logs while loading them: without this it fails
+    // with "Attempt to use DefaultLogger but none has been registered".
+    static INIT: std::sync::OnceLock<()> = std::sync::OnceLock::new();
+    if INIT.get().is_none() {
+        ort::init().with_name("hockey-vision").commit()?;
+        let _ = INIT.set(());
+    }
     let b = Session::builder()?.with_optimization_level(GraphOptimizationLevel::Level3)?.with_intra_threads(threads)?;
     match std::env::var_os("HV_ORT_PROFILE") {
         Some(dir) if !dir.is_empty() => {
