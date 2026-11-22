@@ -61,6 +61,8 @@ TEAMS=(--teams SJS MTL --roster rosters/2026-03-03_MTL_at_SJS.csv)
 
 OUT=$ROOT/bench_results/$(date +%Y%m%d-%H%M%S)
 mkdir -p "$OUT/system"
+# Everything printed from here on also goes to bench.log, so a dropped SSH session loses nothing.
+exec > >(tee -a "$OUT/bench.log") 2>&1
 echo "Results: $OUT"
 sudo -v
 ( while true; do sudo -n true; sleep 50; done ) 2>/dev/null &

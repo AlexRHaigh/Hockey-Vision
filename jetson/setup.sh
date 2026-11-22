@@ -19,7 +19,7 @@ ORT_INDEX=${ORT_INDEX:-https://pypi.jetson-ai-lab.io/jp6/cu126}
 
 echo "== 1. packages"
 sudo apt-get update
-sudo apt-get install -y ffmpeg time git curl build-essential pkg-config libssl-dev python3-pip python3-venv binutils
+sudo apt-get install -y ffmpeg time tmux git curl build-essential pkg-config libssl-dev python3-pip python3-venv binutils
 if ! dpkg -s nvidia-jetpack >/dev/null 2>&1; then
     sudo apt-get install -y nvidia-jetpack
 fi

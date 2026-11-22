@@ -52,6 +52,10 @@ jetson/bench.sh videos/<video>.mp4                                     # 5-minut
 jetson/bench.sh videos/<video>.mp4 --duration full --precisions fp16   # the whole video
 ```
 
-It writes `bench_results/<timestamp>/` and ends with `summary.md` and `summary.json`
+To keep it running if SSH drops, start it with `jetson/bench_detached.sh` instead (same
+arguments). It runs `bench.sh` in a tmux session called `hv-bench`: type the sudo password, detach
+with Ctrl-b then d, and later `tmux attach -t hv-bench` or `tail -f bench_results/*/bench.log`.
+
+It writes `bench_results/<timestamp>/` (with the whole console output in `bench.log`) and ends with `summary.md` and `summary.json`
 (`python3 jetson/summarize.py bench_results/<timestamp>` makes them again). See the comment at
 the top of `bench.sh` for every option and file.
