@@ -69,3 +69,7 @@ jetson/bench_detached.sh videos/<video>.mp4 --precisions fp32 --quality-frames 0
 
 With `--frame-step N`, real time is the video's fps / N, and the summary's real-time factor is
 measured against that.
+
+Smaller, batched jersey crops (the number stage is the bottleneck) go the same way, e.g.
+`-- --frame-step 2 --number-shape 320x192 --number-batch`. The trtexec step still times the number
+model at 640x640.

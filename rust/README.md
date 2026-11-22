@@ -64,7 +64,12 @@ plus `--device cpu|coreml|tensorrt`, `--precision fp32|tf32|fp16` (TensorRT only
 `--threads N` (default: performance cores), `--models-dir`, `--sequential` (no overlapping; same
 output), `--time` (per-stage timings) and `--metrics` (`run_metrics.json` and `frame_times.csv`
 next to the outputs). `--frame-step N` reads every Nth frame (ffmpeg still decodes them all), so
-the output is a video at fps / N and real time means fps / N frames a second. `--device tensorrt` needs a build with `--features tensorrt`, on an NVIDIA
+the output is a video at fps / N and real time means fps / N frames a second.
+`--number-shape HxW` (or `--number-imgsz N`, multiples of 32; default 640x640) sets the shape jersey
+crops are padded to, and `--number-batch` reads each frame's crops in one batch (one TensorRT engine
+for batches of 1-16) instead of one at a time. Both change the jersey readings slightly. To time the
+number model per crop shape: `cargo run --release --example bench_numbers -- <new_nums.onnx>
+cpu|coreml|tensorrt-fp32|tensorrt-fp16 [threads] [batch] [runs] [HxW ...]`. `--device tensorrt` needs a build with `--features tensorrt`, on an NVIDIA
 Jetson: see [jetson/README.md](../jetson/README.md).
 
 Not ported: images (only videos), `--width` and the `--save-video` / `--per-model` / `--debug`
