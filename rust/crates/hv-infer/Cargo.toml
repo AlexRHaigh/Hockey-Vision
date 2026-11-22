@@ -11,6 +11,9 @@ rust-version = "1.81"
 default = []
 # Apple's CoreML execution provider (GPU / Neural Engine) for ONNX Runtime.
 coreml = ["ort/coreml"]
+# NVIDIA TensorRT (with CUDA as the fallback) for the Jetson. The Jetson's own ONNX Runtime GPU build
+# (1.22 or newer) is loaded at run time from ORT_DYLIB_PATH; see jetson/README.md.
+tensorrt = ["ort/tensorrt", "ort/cuda", "ort/load-dynamic"]
 
 [dependencies]
 hv-core.workspace = true

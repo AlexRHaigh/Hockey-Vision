@@ -29,6 +29,8 @@ use crate::model::{Device, Model};
 use crate::video::FrameReader;
 
 pub const MODEL_NAMES: [&str; 5] = ["player", "puck", "number", "rink", "dots"];
+/// The full-frame models, in the order of `FrameStat::models_ms`.
+pub const FULL_MODELS: [&str; 4] = ["player", "puck", "rink", "dots"];
 const RINK_MODELS: [&str; 2] = ["rink", "dots"];
 
 pub fn model_file(name: &str) -> &'static str {
@@ -95,6 +97,32 @@ pub struct Timings {
     pub numbers: Duration,
     pub write: Duration,
     pub total: Duration,
+    /// One entry per frame, for --metrics.
+    pub per_frame: Vec<FrameStat>,
+}
+
+/// What one frame cost and found (times in ms). A model that didn't run on the frame (the rink
+/// models between --rink-stride frames) has NaN.
+#[derive(Clone, Debug, Default)]
+pub struct FrameStat {
+    pub frame: usize,
+    /// When the frame's record was written, in seconds since decoding started.
+    pub done_s: f64,
+    pub cut: bool,
+    pub rink_run: bool,
+    pub decode_wait_ms: f64,
+    pub resize_ms: f64,
+    /// Inference time per model in FULL_MODELS order.
+    pub models_ms: [f64; 4],
+    pub tracking_ms: f64,
+    /// The whole jersey-number stage: crops, the number model, voting.
+    pub numbers_ms: f64,
+    /// Just the number model's inference within it.
+    pub number_model_ms: f64,
+    pub number_crops: usize,
+    pub write_ms: f64,
+    /// Boxes found per model in FULL_MODELS order, then digits.
+    pub boxes: [usize; 5],
 }
 
 pub struct Detector {
@@ -104,6 +132,14 @@ pub struct Detector {
     number: Option<Model>,
     /// Class names per model as written to detections.json (the puck model's "item" is "puck").
     names: HashMap<&'static str, Vec<String>>,
+}
+
+/// How long a model took to load: its dynamic session, then each fixed-shape session (with
+/// TensorRT, building or loading the engine).
+pub struct LoadTime {
+    pub model: &'static str,
+    pub dynamic: Duration,
+    pub fixed: Vec<((usize, usize, usize), Duration)>,
 }
 
 /// (w, h) the models shrink a (w, h) frame to for input size `imgsz`, or None when they wouldn't.
@@ -152,6 +188,22 @@ impl Detector {
         Ok(Detector { cfg, full, number, names })
     }
 
+    fn models_mut(&mut self) -> impl Iterator<Item = (&'static str, &mut Model)> {
+        self.full.iter_mut().map(|(n, m)| (*n, m)).chain(self.number.as_mut().map(|m| ("number", m)))
+    }
+
+    /// Load times so far (fixed-shape sessions are made on first use, so call this after a video).
+    pub fn load_times(&mut self) -> Vec<LoadTime> {
+        self.models_mut()
+            .map(|(model, m)| LoadTime { model, dynamic: m.load_time, fixed: m.static_load_times.clone() })
+            .collect()
+    }
+
+    /// With HV_ORT_PROFILE set: end profiling and return the ONNX Runtime profile files written.
+    pub fn end_profiling(&mut self) -> Vec<String> {
+        self.models_mut().flat_map(|(_, m)| m.end_profiling()).collect()
+    }
+
     /// process_video: writes <output>/<video stem>/detections.json.
     pub fn process_video(&mut self, path: &Path) -> Result<Timings, String> {
         let Detector { cfg, full, number, names } = self;
@@ -184,16 +236,29 @@ impl Detector {
         let mut done = 0usize;
         let mut finish = |frame: Frame, number: &mut Option<Model>, t: &mut Timings| -> Result<(), String> {
             let tn = Instant::now();
+            let mut stat = frame.stat.clone();
             let jerseys = match number.as_mut() {
-                Some(model) => Some(numbers(cfg, names, model, &mut votes, &frame)?),
+                Some(model) => {
+                    let (js, crops, model_time) = numbers(cfg, names, model, &mut votes, &frame)?;
+                    stat.number_crops = crops;
+                    stat.number_model_ms = ms(model_time);
+                    stat.boxes[4] = js.iter().map(|j| j.digits.len()).sum();
+                    Some(js)
+                }
                 None => None,
             };
-            t.numbers += tn.elapsed();
+            let numbers_time = tn.elapsed();
+            t.numbers += numbers_time;
+            stat.numbers_ms = ms(numbers_time);
             let tw = Instant::now();
             let record = record(cfg, names, frame.idx, fps, frame.cut, frame.rink_run, &frame.results, jerseys.as_deref());
             file.write_all(if frame.idx == 0 { b"\n" } else { b",\n" }).map_err(|e| e.to_string())?;
             file.write_all(dumps(&record).as_bytes()).map_err(|e| e.to_string())?;
-            t.write += tw.elapsed();
+            let write_time = tw.elapsed();
+            t.write += write_time;
+            stat.write_ms = ms(write_time);
+            stat.done_s = start.elapsed().as_secs_f64();
+            t.per_frame.push(stat);
             done += 1;
             if done % 25 == 0 || done == total {
                 eprint!("\r  frame {done}/{}", if total > 0 { total.to_string() } else { "?".into() });
@@ -207,7 +272,8 @@ impl Detector {
             loop {
                 let tw = Instant::now();
                 let next = video.next().transpose()?;
-                t.decode_wait += tw.elapsed();
+                let decode_wait = tw.elapsed();
+                t.decode_wait += decode_wait;
                 let Some((image, cut)) = next else { break };
                 // The rink models run every rink_stride frames, and on every cut since the old fit is gone.
                 let rink_run = cut || idx % cfg.rink_stride == 0;
@@ -216,8 +282,8 @@ impl Detector {
                 if !cfg.parallel {
                     let mut st = StageTimes::default();
                     let results = stage1(cfg, full, &mut tracker, &image, !rink_run, false, &mut st)?;
-                    st.add_to(&mut t);
-                    finish(Frame { idx: this, image, cut, rink_run, results }, number, &mut t)?;
+                    let stat = st.add_to(&mut t, this, cut, rink_run, decode_wait, &results);
+                    finish(Frame { idx: this, image, cut, rink_run, results, stat }, number, &mut t)?;
                     continue;
                 }
                 // Stage 1 of this frame on another thread while stage 2 of the previous one runs here.
@@ -238,8 +304,8 @@ impl Detector {
                 });
                 prev_result?;
                 let (results, st) = res?;
-                st.add_to(&mut t);
-                pending = Some(Frame { idx: this, image, cut, rink_run, results });
+                let stat = st.add_to(&mut t, this, cut, rink_run, decode_wait, &results);
+                pending = Some(Frame { idx: this, image, cut, rink_run, results, stat });
             }
             if let Some(p) = pending.take() {
                 finish(p, number, &mut t)?;
@@ -262,6 +328,12 @@ struct Frame {
     cut: bool,
     rink_run: bool,
     results: Results,
+    /// Stage 1's part of the frame's stats; stage 2 fills in the rest.
+    stat: FrameStat,
+}
+
+fn ms(d: Duration) -> f64 {
+    d.as_secs_f64() * 1e3
 }
 
 #[derive(Default)]
@@ -272,12 +344,32 @@ struct StageTimes {
 }
 
 impl StageTimes {
-    fn add_to(self, t: &mut Timings) {
+    /// Adds this frame's stage 1 times to the totals and returns its FrameStat so far.
+    fn add_to(self, t: &mut Timings, frame: usize, cut: bool, rink_run: bool, decode_wait: Duration, results: &Results) -> FrameStat {
         t.resize += self.resize;
         t.tracking += self.tracking;
+        let mut stat = FrameStat {
+            frame,
+            cut,
+            rink_run,
+            decode_wait_ms: ms(decode_wait),
+            resize_ms: ms(self.resize),
+            tracking_ms: ms(self.tracking),
+            models_ms: [f64::NAN; 4],
+            ..Default::default()
+        };
         for (n, d) in self.models {
             *t.models.entry(n).or_default() += d;
+            if let Some(i) = FULL_MODELS.iter().position(|m| *m == n) {
+                stat.models_ms[i] = ms(d);
+            }
         }
+        for (n, boxes) in results {
+            if let Some(i) = FULL_MODELS.iter().position(|m| m == n) {
+                stat.boxes[i] = boxes.len();
+            }
+        }
+        stat
     }
 }
 
@@ -384,7 +476,7 @@ fn numbers(
     model: &mut Model,
     votes: &mut JerseyVotes<(i64, String)>,
     frame: &Frame,
-) -> Result<Vec<Jersey>, String> {
+) -> Result<(Vec<Jersey>, usize, Duration), String> {
     let players = &frame.results.iter().find(|(n, _)| *n == "player").unwrap().1;
     let pnames = &names["player"];
     // Keyed on the class too, so an id handed to the other team doesn't inherit the number.
@@ -398,14 +490,14 @@ fn numbers(
             })
             .collect()
     });
-    let mut js = read_jerseys(cfg, names, model, &frame.image, players, only.as_deref())?;
+    let (mut js, crops, model_time) = read_jerseys(cfg, names, model, &frame.image, players, only.as_deref())?;
     for (k, j) in keys.iter().zip(&js) {
         votes.add(k.as_ref(), j.reading.as_ref());
     }
     for (k, j) in keys.iter().zip(js.iter_mut()) {
         j.number = k.as_ref().and_then(|k| votes.number(k));
     }
-    Ok(js)
+    Ok((js, crops, model_time))
 }
 
 /// read_jerseys: each player's digits and reading this frame (players not in `only` aren't read).
@@ -416,7 +508,7 @@ fn read_jerseys(
     frame: &Image,
     players: &[OutBox],
     only: Option<&[bool]>,
-) -> Result<Vec<Jersey>, String> {
+) -> Result<(Vec<Jersey>, usize, Duration), String> {
     let classes: Vec<&String> = players.iter().map(|p| &names["player"][p.cls]).collect();
     let mut jerseys: Vec<Jersey> = players.iter().map(|_| Jersey { digits: vec![], reading: None, number: None }).collect();
     let (w, h) = (frame.w as i64, frame.h as i64);
@@ -434,6 +526,7 @@ fn read_jerseys(
         crops.push((i, x1, y1, frame.crop(x1 as usize, y1 as usize, x2 as usize, y2 as usize)));
     }
     let mut results: Vec<Vec<Det>> = vec![];
+    let mut model_time = Duration::ZERO;
     for batch in crops.chunks(NUMBER_BATCH) {
         // Ultralytics pads to a square unless every image in the batch has the same shape.
         let same = batch.iter().all(|c| (c.3.w, c.3.h) == (batch[0].3.w, batch[0].3.h));
@@ -444,9 +537,10 @@ fn read_jerseys(
             letterbox_into(&c.3, lb, &mut input);
         }
         let (ih, iw) = lbs[0].shape;
-        let (shape, out) = if cfg.device == Device::CoreMl && (ih, iw) == (NUMBER_IMGSZ, NUMBER_IMGSZ) {
-            // CoreML: one crop at a time through the fixed-shape session (much faster than a
-            // dynamic batch).
+        let tm = Instant::now();
+        let (shape, out) = if cfg.device.uses_static() && (ih, iw) == (NUMBER_IMGSZ, NUMBER_IMGSZ) {
+            // CoreML / TensorRT: one crop at a time through the fixed-shape session (much faster
+            // than a dynamic batch, and one engine instead of one per batch size).
             model.allow_static(1, ih, iw);
             let per_in = 3 * ih * iw;
             let mut all = vec![];
@@ -461,6 +555,7 @@ fn read_jerseys(
         } else {
             model.run(input, batch.len(), ih, iw)?
         };
+        model_time += tm.elapsed();
         let per = shape[1] * shape[2];
         for (k, (c, lb)) in batch.iter().zip(&lbs).enumerate() {
             let mut d = nms(&out[k * per..(k + 1) * per], shape[1] - 4, shape[2], cfg.conf, None);
@@ -503,7 +598,8 @@ fn read_jerseys(
             }
         }
     }
-    Ok(jerseys)
+    let n_crops = crops.len();
+    Ok((jerseys, n_crops, model_time))
 }
 
 /// One frame's record, as run_models.py writes it.

@@ -22,14 +22,17 @@ use std::path::Path;
 
 use hv_core::{detections, export, pipeline};
 use hv_infer::detect::{self, Config, Detector, Timings};
-use hv_infer::model::Device;
+use hv_infer::model::{Device, Precision};
+
+mod metrics;
 
 const USAGE: &str = "usage:
   hockey-vision homography <detections.json> --frame-size WxH [--output DIR] [--threads N] [--sequential] [--time]
   hockey-vision export <clip folder>... [--output DIR] [--time]
   hockey-vision detect <video or folder> [--models NAME...] [--conf X] [--puck-conf X] [--output DIR]
       [--max-frames N] [--teams TEAM_A TEAM_B] [--roster CSV] [--jersey-stride N] [--rink-stride N]
-      [--weights NAME=PATH...] [--models-dir DIR] [--device cpu|coreml] [--threads N] [--sequential] [--time]
+      [--weights NAME=PATH...] [--models-dir DIR] [--device cpu|coreml|tensorrt]
+      [--precision fp32|tf32|fp16] [--threads N] [--sequential] [--time] [--metrics]
   hockey-vision run <video or folder> [detect options]   (detect + homography + export)";
 
 fn main() -> ExitCode {
@@ -177,8 +180,18 @@ fn export_cmd(args: Vec<String>) -> Result<(), Error> {
 
 const VIDEO_EXTS: [&str; 6] = ["mp4", "mov", "avi", "mkv", "m4v", "webm"];
 
-fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, bool), Error> {
+/// detect / run options beyond the Config.
+struct Opts {
+    time: bool,
+    /// Write run_metrics.json and frame_times.csv next to each clip's outputs.
+    metrics: bool,
+    /// The settings, as recorded in run_metrics.json.
+    settings: serde_json::Value,
+}
+
+fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, Opts), Error> {
     let mut it = args.into_iter().peekable();
+    let (mut metrics, mut precision) = (false, Precision::Fp32);
     let mut source = None;
     let mut models: Vec<String> = detect::MODEL_NAMES.iter().map(|s| s.to_string()).collect();
     let (mut conf, mut puck_conf, mut imgsz) = (0.25f32, detect::DEFAULT_PUCK_CONF, 640usize);
@@ -218,9 +231,19 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, bool), Error
                 device = match next_value(&mut it, &a)?.as_str() {
                     "cpu" => Device::Cpu,
                     "coreml" | "mps" => Device::CoreMl,
-                    d => return Err(usage(format!("unknown device {d} (cpu or coreml)"))),
+                    "tensorrt" | "trt" => Device::TensorRt(precision),
+                    d => return Err(usage(format!("unknown device {d} (cpu, coreml or tensorrt)"))),
                 }
             }
+            "--precision" => {
+                precision = match next_value(&mut it, &a)?.as_str() {
+                    "fp32" => Precision::Fp32,
+                    "tf32" => Precision::Tf32,
+                    "fp16" => Precision::Fp16,
+                    p => return Err(usage(format!("unknown precision {p} (fp32, tf32 or fp16)"))),
+                }
+            }
+            "--metrics" => metrics = true,
             "--threads" => threads = num(next_value(&mut it, &a)?, &a)? as usize,
             "--time" => time = true,
             "--sequential" => sequential = true,
@@ -258,9 +281,9 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, bool), Error
         }
         paths.insert(name.to_string(), PathBuf::from(path));
     }
-    let roster = match teams {
+    let roster = match &teams {
         Some([a, b]) => {
-            let r = hv_core::roster::Roster::load(&roster, [&a, &b]).map_err(Error::Failed)?;
+            let r = hv_core::roster::Roster::load(&roster, [a, b]).map_err(Error::Failed)?;
             eprintln!("Rosters from {}: {}", r.path.file_name().map(|s| s.to_string_lossy()).unwrap_or_default(), r.describe());
             Some(r)
         }
@@ -268,6 +291,28 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, bool), Error
     };
     // Default: one thread per performance core (Apple Silicon), else per core.
     let threads = if threads == 0 { default_threads() } else { threads };
+    if let Device::TensorRt(_) = device {
+        device = Device::TensorRt(precision); // --precision may come after --device
+        // TensorRT and cuDNN use TF32 tensor cores for FP32 layers on Ampere (the Orin) unless
+        // this is 0, which has to be set before CUDA starts.
+        if precision == Precision::Fp32 {
+            std::env::set_var("NVIDIA_TF32_OVERRIDE", "0");
+        } else {
+            std::env::remove_var("NVIDIA_TF32_OVERRIDE");
+        }
+    } else if precision != Precision::Fp32 {
+        return Err(usage("--precision is for --device tensorrt"));
+    }
+    let settings = serde_json::json!({
+        "device": device.name(),
+        "precision": if matches!(device, Device::TensorRt(_)) { precision.name() } else { "fp32" },
+        "models": models,
+        "weights": paths.iter().map(|(k, v)| (k.clone(), v.display().to_string())).collect::<std::collections::BTreeMap<_, _>>(),
+        "conf": conf, "puck_conf": puck_conf, "imgsz": imgsz,
+        "teams": teams.as_ref().map(|t| t.to_vec()),
+        "jersey_stride": jersey_stride, "rink_stride": rink_stride.max(1), "max_frames": max_frames,
+        "threads": threads, "parallel": !sequential,
+    });
     let cfg = Config {
         models,
         weights: paths,
@@ -283,7 +328,7 @@ fn parse_detect(args: Vec<String>) -> Result<(Vec<PathBuf>, Config, bool), Error
         threads,
         parallel: !sequential,
     };
-    Ok((inputs, cfg, time))
+    Ok((inputs, cfg, Opts { time, metrics, settings }))
 }
 
 fn print_timings(t: &Timings) {
@@ -305,16 +350,25 @@ fn print_timings(t: &Timings) {
 }
 
 fn detect_cmd(args: Vec<String>) -> Result<(), Error> {
-    let (inputs, cfg, time) = parse_detect(args)?;
+    let (inputs, cfg, opts) = parse_detect(args)?;
     let output = cfg.output.clone();
-    eprintln!("Loading models: {} (device: {:?}, {} threads)", cfg.models.join(", "), cfg.device, cfg.threads);
+    eprintln!("Loading models: {} (device: {}, {} threads)", cfg.models.join(", "), cfg.device.name(), cfg.threads);
+    let tl = Instant::now();
     let mut det = Detector::new(cfg).map_err(Error::Failed)?;
+    let load_wall = tl.elapsed();
     for path in inputs {
         let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
-        eprintln!("{} -> {}/", path.display(), output.join(&stem).display());
+        let clip_dir = output.join(&stem);
+        eprintln!("{} -> {}/", path.display(), clip_dir.display());
         let t = det.process_video(&path).map_err(Error::Failed)?;
-        if time {
+        if opts.time {
             print_timings(&t);
+        }
+        if opts.metrics {
+            let info = hv_infer::video::probe(&path).map_err(Error::Failed)?;
+            let profiles = det.end_profiling();
+            let m = metrics::build(&opts.settings, &path, &info, &t, &det.load_times(), load_wall, &[], None, &profiles);
+            metrics::write(&clip_dir, &m, &t).map_err(Error::Failed)?;
         }
     }
     Ok(())
@@ -323,10 +377,13 @@ fn detect_cmd(args: Vec<String>) -> Result<(), Error> {
 // ---- run: the whole pipeline
 
 fn run_cmd(args: Vec<String>) -> Result<(), Error> {
-    let (inputs, cfg, time) = parse_detect(args)?;
+    let (inputs, cfg, opts) = parse_detect(args)?;
+    let time = opts.time;
     let output = cfg.output.clone();
-    eprintln!("Loading models: {} (device: {:?}, {} threads)", cfg.models.join(", "), cfg.device, cfg.threads);
+    eprintln!("Loading models: {} (device: {}, {} threads)", cfg.models.join(", "), cfg.device.name(), cfg.threads);
+    let tl = Instant::now();
     let mut det = Detector::new(cfg).map_err(Error::Failed)?;
+    let load_wall = tl.elapsed();
     for path in inputs {
         let stem = path.file_stem().map(|s| s.to_string_lossy().into_owned()).unwrap_or_default();
         let clip_dir = output.join(&stem);
@@ -349,6 +406,12 @@ fn run_cmd(args: Vec<String>) -> Result<(), Error> {
         let t2 = Instant::now();
         export::run(&[export::py_path(&clip_dir)], None).map_err(Error::Failed)?;
         let t_export = t2.elapsed();
+        if opts.metrics {
+            let profiles = det.end_profiling();
+            let stages = [metrics::Stage { name: "rink_fit", time: t_fit }, metrics::Stage { name: "export", time: t_export }];
+            let m = metrics::build(&opts.settings, &path, &info, &t, &det.load_times(), load_wall, &stages, Some(&s), &profiles);
+            metrics::write(&clip_dir, &m, &t).map_err(Error::Failed)?;
+        }
         if time {
             print_timings(&t);
             let n = t.frames.max(1) as f64;

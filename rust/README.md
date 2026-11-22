@@ -60,11 +60,14 @@ $B export outputs/<clip>                                            # export_dat
 
 `detect` and `run` take run_models.py's options (`--models`, `--conf`, `--puck-conf`, `--teams`,
 `--roster`, `--jersey-stride`, `--rink-stride`, `--max-frames`, `--output`, `--weights NAME=PATH`)
-plus `--device cpu|coreml`, `--threads N` (default: performance cores), `--models-dir`,
-`--sequential` (no overlapping; same output) and `--time` (per-stage timings).
+plus `--device cpu|coreml|tensorrt`, `--precision fp32|tf32|fp16` (TensorRT only),
+`--threads N` (default: performance cores), `--models-dir`, `--sequential` (no overlapping; same
+output), `--time` (per-stage timings) and `--metrics` (`run_metrics.json` and `frame_times.csv`
+next to the outputs). `--device tensorrt` needs a build with `--features tensorrt`, on an NVIDIA
+Jetson: see [jetson/README.md](../jetson/README.md).
 
-Not ported: images (only videos), `--width`, `--save-video` / `--per-model` / `--debug` videos, and
-TensorRT engines. Use the `Python-Implementation` branch for those.
+Not ported: images (only videos), `--width` and the `--save-video` / `--per-model` / `--debug`
+videos. Use the `Python-Implementation` branch for those.
 
 ## How close it is to Python
 

@@ -227,3 +227,9 @@ webapp/*.db
 
 # Annotated outputs from run_models.py
 outputs/
+
+# Jetson benchmarking (jetson/bench.sh, jetson/setup.sh)
+bench_results/
+jetson/ort.env
+.venv-ort/
+.venv-build/
