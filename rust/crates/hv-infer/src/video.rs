@@ -8,6 +8,7 @@ use std::io::Read;
 use std::path::{Path, PathBuf};
 use std::process::{Child, Command, ExitStatus, Stdio};
 use std::sync::mpsc::{sync_channel, Receiver};
+use std::sync::OnceLock;
 use std::thread::JoinHandle;
 
 use hv_core::image::{CutDetector, Image, YuvToBgr};
@@ -59,6 +60,25 @@ pub fn probe(path: &Path) -> Result<VideoInfo, String> {
     })
 }
 
+/// The ffmpeg option that passes frames through without dropping or duplicating any.
+/// `-fps_mode` arrived in FFmpeg 5.1; older builds (e.g. the 4.x that Ubuntu and JetPack ship)
+/// only know the older name `-vsync`. Unknown version strings (git builds) are taken as new.
+fn passthrough_flag() -> &'static str {
+    static FLAG: OnceLock<&'static str> = OnceLock::new();
+    FLAG.get_or_init(|| {
+        let out = Command::new("ffmpeg").arg("-version").output();
+        let text = out.map(|o| String::from_utf8_lossy(&o.stdout).into_owned()).unwrap_or_default();
+        let version = text.split_whitespace().nth(2).unwrap_or("");
+        let mut parts = version.trim_start_matches('n').split(|c: char| !c.is_ascii_digit());
+        let major: Option<u32> = parts.next().and_then(|p| p.parse().ok());
+        let minor: u32 = parts.next().and_then(|p| p.parse().ok()).unwrap_or(0);
+        match major {
+            Some(m) if (m, minor) < (5, 1) => "-vsync",
+            _ => "-fps_mode",
+        }
+    })
+}
+
 pub struct FrameReader {
     pub info: VideoInfo,
     /// True when frames are bit-identical to OpenCV's decoding.
@@ -81,7 +101,7 @@ impl FrameReader {
         if max_frames > 0 {
             cmd.args(["-frames:v", &max_frames.to_string()]);
         }
-        cmd.args(["-map", "0:v:0", "-fps_mode", "passthrough", "-f", "rawvideo", "-pix_fmt"])
+        cmd.args(["-map", "0:v:0", passthrough_flag(), "passthrough", "-f", "rawvideo", "-pix_fmt"])
             .arg(if exact { "yuv420p" } else { "bgr24" })
             .arg("-")
             .stdout(Stdio::piped())
