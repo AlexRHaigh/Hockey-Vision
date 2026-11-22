@@ -73,3 +73,27 @@ measured against that.
 Smaller, batched jersey crops (the number stage is the bottleneck) go the same way, e.g.
 `-- --frame-step 2 --number-shape 320x192 --number-batch`. The trtexec step still times the number
 model at 640x640.
+
+## 4. Results so far
+
+Jetson Orin Nano Super (MAXN SUPER, JetPack r36.4.7, ONNX Runtime 1.24.0), `bench.sh` defaults:
+a 5-minute segment from 3:00 of the Canadiens vs Sharks game (Mar 3, 2026), 1080p at 59.94 fps,
+every frame (17,983 frames). Results in `bench_results/20261121-210102` (not in git).
+
+| | FP32 | FP16 |
+|---|---|---|
+| Frames needed per second (real time) | 59.94 | 59.94 |
+| Detect FPS / steady FPS | 12.52 / 12.56 | 16.32 / 16.38 |
+| End-to-end FPS | 12.49 | 16.28 |
+| Real-time factor (1.0 = real time) | 0.209x | 0.272x |
+| Frame interval p50 / p95 / p99 (max) | 82 / 123 / 152 ms (2198) | 54 / 98 / 320 ms (955) |
+| Board power mean / max (idle 7.02 W) | 17.52 / 19.55 W | 13.46 / 15.62 W |
+| Energy per frame | 1.403 J | 0.827 J |
+| FPS per watt | 0.71 | 1.21 |
+| Max temperature | 67.9 C | 62.9 C |
+| Peak process memory | 3,650 MB | 3,529 MB |
+
+FP32 on TensorRT matches the CPU FP32 run (1.04 FPS on the Jetson's CPU); FP16 changes about 5%
+of jersey numbers. The jersey-number stage is the bottleneck (about 79 ms a frame at FP32).
+With `--frame-step 2` real time is 29.97 frames a second, so at the same cost per frame FP32
+would reach about 0.42x.
